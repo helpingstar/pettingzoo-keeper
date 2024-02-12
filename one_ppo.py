@@ -3,19 +3,23 @@ import os
 import random
 import time
 from dataclasses import dataclass
-
+from gymnasium.experimental.wrappers import RecordVideoV0
 import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
 from network import Agent
 from pettingzoo.utils import ParallelEnv
 from typing import Dict, Any
+import yaml
+from network import Agent
+from pikazoo import pikazoo_v0
+import supersuit as ss
+from tqdm import tqdm
 
 
 class OnePlayerPPO:
@@ -44,7 +48,6 @@ class OnePlayerPPO:
             wandb.init(
                 project=self.wandb_project_name,
                 entity=self.wandb_entity,
-                sync_tensorboard=True,
                 config=vars(self),
                 name=run_name,
                 monitor_gym=True,
@@ -53,8 +56,8 @@ class OnePlayerPPO:
         # TRY NOT TO MODIFY: seeding
         self.env = env
         self.is_right = is_right
-        self.player_train = f"player_{self.is_right}"
-        self.player_no_train = f"player_{self.is_right ^ 1}"
+        player_train = env.possible_agents[self.is_right]
+        player_no_train = env.possible_agents[self.is_right ^ 1]
         random.seed(self.seed)
         np.random.seed(self.seed)
         torch.manual_seed(self.seed)
@@ -73,10 +76,10 @@ class OnePlayerPPO:
 
         # ALGO Logic: Storage setup
         obs = torch.zeros(
-            (self.num_steps, self.num_envs) + env.observation_space().shape
+            (self.num_steps, self.num_envs) + env.observation_space("player_1").shape
         ).to(device)
         actions = torch.zeros(
-            (self.num_steps, self.num_envs) + env.action_space.shape
+            (self.num_steps, self.num_envs) + env.action_space("player_1").shape
         ).to(device)
         logprobs = torch.zeros((self.num_steps, self.num_envs)).to(device)
         rewards = torch.zeros((self.num_steps, self.num_envs)).to(device)
@@ -92,7 +95,7 @@ class OnePlayerPPO:
         next_obs_no_train = torch.Tensor(next_obs_no_train).to(device)
         next_done = torch.zeros(self.num_envs).to(device)
 
-        for iteration in range(1, self.num_iterations + 1):
+        for iteration in tqdm(range(1, self.num_iterations + 1)):
             # Annealing the rate if instructed to do so.
             if self.anneal_lr:
                 frac = 1.0 - (iteration - 1.0) / self.num_iterations
@@ -119,25 +122,24 @@ class OnePlayerPPO:
                 # TRY NOT TO MODIFY: execute the game and log data.
                 next_obs, reward, terminations, truncations, infos = env.step(
                     {
-                        self.player_train: action.cpu().numpy(),
-                        self.player_no_train: action_no_train.cpu().numpy(),
+                        player_train: action.cpu().numpy(),
+                        player_no_train: action_no_train.cpu().numpy(),
                     }
                 )
-                if terminations or truncations:
+                if terminations[player_train] or truncations[player_train]:
                     wandb.log(
                         {
-                            "charts/score": env.scores[self.is_right]
-                            - env.scores[self.is_right ^ 1]
+                            "charts/score": infos[player_train]["score"] - infos[player_no_train]["score"]
                         }
                     )
                     next_obs, infos = env.reset()
-                next_obs = next_obs[self.player_train]
-                reward = reward[self.player_train]
-                terminations = terminations[self.player_train]
-                truncations = truncations[self.player_train]
-                infos = infos[self.player_train]
+                next_obs = next_obs[player_train]
+                reward = reward[player_train]
+                terminations = terminations[player_train]
+                truncations = truncations[player_train]
+                infos = infos[player_train]
 
-                next_done = np.logical_or(terminations, truncations)
+                next_done = np.array(any([terminations, truncations]))
                 rewards[step] = torch.tensor(reward).to(device).view(-1)
                 next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(
                     next_done
@@ -167,9 +169,9 @@ class OnePlayerPPO:
                 returns = advantages + values
 
             # flatten the batch
-            b_obs = obs.reshape((-1,) + env.observation_space.shape)
+            b_obs = obs.reshape((-1,) + env.observation_space("player_1").shape)
             b_logprobs = logprobs.reshape(-1)
-            b_actions = actions.reshape((-1,) + env.action_space.shape)
+            b_actions = actions.reshape((-1,) + env.action_space("player_1").shape)
             b_advantages = advantages.reshape(-1)
             b_returns = returns.reshape(-1)
             b_values = values.reshape(-1)
@@ -258,10 +260,25 @@ class OnePlayerPPO:
             wandb.log({"losses/approx_kl": approx_kl.item()}, step=global_step)
             wandb.log({"losses/clipfrac": np.mean(clipfracs)}, step=global_step)
             wandb.log({"losses/explained_variance": explained_var}, step=global_step)
-            print("SPS:", int(global_step / (time.time() - start_time)))
             wandb.log(
                 {"charts/SPS": int(global_step / (time.time() - start_time))},
                 step=global_step,
             )
 
         env.close()
+
+if __name__ == "__main__":
+    env = pikazoo_v0.env(render_mode=None)
+    env = ss.dtype_v0(env, np.float32)
+    env = ss.normalize_obs_v0(env)
+    # env = RecordVideoV0(env, video_folder='.', episode_trigger=lambda x: (x % 50 == 0), disable_logger=True)
+    agent_train = Agent()
+    agent_no_train = Agent()
+    with open("ppo.yaml") as f:
+        args = yaml.load(f, Loader=yaml.FullLoader)
+    agent_train = Agent()
+    agent_no_train = Agent()
+
+    learner = OnePlayerPPO(args)
+
+    learner.train(env, agent_train, agent_no_train, is_right=0, run_name="pikazoo_test_2")
