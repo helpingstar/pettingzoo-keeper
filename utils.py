@@ -60,3 +60,22 @@ def get_all_shared_weights(start_dir):
                 weights_list.append(os.path.join(root, file))
 
     return weights_list
+
+
+def get_independent_weights(start_dir, folder_name, file_keyword):
+    target_dir = os.path.join(start_dir, folder_name, "independent")
+    file_paths = []
+
+    # Check if the target directory exists
+    if not os.path.exists(target_dir):
+        return file_paths
+
+    for root, dirs, files in os.walk(target_dir):
+        # Add the path of files that contain the specified keyword in their name
+        for file in files:
+            if file_keyword in file:
+                file_paths.append(os.path.join(root, file))
+    
+    return file_paths
+
+delete_files_in_leaf_folders("test1")
