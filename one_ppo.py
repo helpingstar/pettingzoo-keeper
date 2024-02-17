@@ -38,6 +38,16 @@ class OnePlayerPPO:
         env: ParallelEnv,
         agent_train: Agent,
         agent_no_train: Agent,
+        run_name: str,
+    ):
+        self.train_one_side(env, agent_train, agent_no_train, 0, run_name)
+        self.train_one_side(env, agent_train, agent_no_train, 1, run_name)
+
+    def train_one_side(
+        self,
+        env: ParallelEnv,
+        agent_train: Agent,
+        agent_no_train: Agent,
         is_right: int,
         run_name: str,
     ):
@@ -129,7 +139,8 @@ class OnePlayerPPO:
                 if terminations[player_train] or truncations[player_train]:
                     wandb.log(
                         {
-                            "charts/score": infos[player_train]["score"] - infos[player_no_train]["score"]
+                            "charts/score": infos[player_train]["score"]
+                            - infos[player_no_train]["score"]
                         }
                     )
                     next_obs, infos = env.reset()
@@ -267,6 +278,7 @@ class OnePlayerPPO:
 
         env.close()
 
+
 if __name__ == "__main__":
     env = pikazoo_v0.env(render_mode=None)
     env = ss.dtype_v0(env, np.float32)
@@ -281,4 +293,6 @@ if __name__ == "__main__":
 
     learner = OnePlayerPPO(args)
 
-    learner.train(env, agent_train, agent_no_train, is_right=0, run_name="pikazoo_test_2")
+    learner.train(
+        env, agent_train, agent_no_train, is_right=0, run_name="pikazoo_test_2"
+    )

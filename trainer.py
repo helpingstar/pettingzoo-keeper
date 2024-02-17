@@ -1,78 +1,63 @@
-import tyro
-from dataclasses import dataclass
-from pettingzoo.utils import AECEnv, ParallelEnv
-import torch.nn as nn
-from utils import schedule_matches, copy_network
-
-
-@dataclass
-class Args:
-    is_parallel = True
-    is_symmetry = False
-    agent_pool = 4
-    cycle = 10
-    n_match = 2
-    rating = "ELO"  # ELO / WinningRate
+import yaml
+import os
+from pikazoo import pikazoo_v0
+from pikazoo.wrappers import RewardByBallPosition, RewardInNormalState
 
 
 class SelfPlay:
-    def __init__(
-        self,
-        env: AECEnv | ParallelEnv,
-        is_symmetry: bool,
-        n_agent_pool: int,
-        cycle: int,
-        n_match: int,
-        rating: str,
-        network: nn.Module,
-        algorithm,
-    ) -> None:
-        assert n_agent_pool % 2 == 0
-        assert is_symmetry or n_match % 2 == 0
-        assert isinstance(env, AECEnv) or isinstance(env, ParallelEnv)
+    def __init__(self, experiment_name: str) -> None:
+        with open("config.yaml") as f:
+            args = yaml.load(f, Loader=yaml.FullLoader)
+        self.experiment_name = experiment_name
 
-        self.env = env
-        self.is_parallel = True if isinstance(env, ParallelEnv) else False
-        self.is_symmetry = is_symmetry
-        self.n_agent_pool = n_agent_pool
-        self.cycle = cycle
-        self.n_match = n_match
-        self.rating = rating
+        self.env_dict = dict()
+        for i, agent_type in enumerate(args["agent"]["agent_type"]):
+            if agent_type == "normal":
+                env = pikazoo_v0.env(render_mode=None)
+                self.env_dict[agent_type] = [env]
+            elif agent_type == "neg_on_all_state":
+                env = pikazoo_v0.env(render_mode=None)
+                env = RewardInNormalState(env, args["agent"]["reward"][i])
+                self.env_dict[agent_type] = [env]
+            elif agent_type == "pos_on_half":
+                env1 = pikazoo_v0.env(render_mode=None)
+                env1 = RewardByBallPosition(
+                    env1, {1, 4}, args["agent"]["reward"][i], False
+                )
+                env2 = pikazoo_v0.env(render_mode=None)
+                env2 = RewardByBallPosition(
+                    env2, {1, 4}, args["agent"]["reward"][i], True
+                )
+                self.env_dict[agent_type] = [env1, env2]
+            elif agent_type == "pos_on_quarter_down":
+                env1 = pikazoo_v0.env(render_mode=None)
+                env1 = RewardByBallPosition(
+                    env1, {4}, args["agent"]["reward"][i], False
+                )
+                env2 = pikazoo_v0.env(render_mode=None)
+                env2 = RewardByBallPosition(env2, {4}, args["agent"]["reward"][i], True)
+                self.env_dict[agent_type] = [env1, env2]
+            else:  # "pos_on_quarter_up"
+                env1 = pikazoo_v0.env(render_mode=None)
+                env1 = RewardByBallPosition(
+                    env1, {1}, args["agent"]["reward"][i], False
+                )
+                env2 = pikazoo_v0.env(render_mode=None)
+                env2 = RewardByBallPosition(env2, {1}, args["agent"]["reward"][i], True)
+                self.env_dict[agent_type] = [env1, env2]
 
-        self.schedule = schedule_matches(n_agent_pool)
+        # Create a experiment folder
+        if not os.path.exists(self.experiment_name):
+            os.makedirs(self.experiment_name)
 
-        self.candidates = [network() for _ in range(n_agent_pool)]
-        self.copy_network(0)
-
-    def copy_network(self, cand_idx: int):
-        for i in range(self.n_agent_pool):
-            if i == cand_idx:
-                continue
-            copy_network(self.candidates[cand_idx], self.candidates[i])
-
-    def train(self):
-        for c in range(self.cycle):
-            self.league
-
-            # evaluate
-            # get winner
-            # copy network
-
-    def league(self):
-        for m in range(self.n_match):
-            for round in self.schedule:  # round: List[Tuple[int]]
-                for c1, c2 in round:
-                    self.learn(c1, c2)
-
-    def learn(self, c1, c2):
-        c1_network = self.candidates[c1]
-        c2_network = self.candidates[c2]
-
-        # battle
-
-    def evaluate(self):
-        pass
+            for agent_type in args["agent"]["agent_type"]:
+                agent_folder_path = os.path.join(self.experiment_name, agent_type)
+                os.makedirs(agent_folder_path)
+                os.makedirs(os.path.join(agent_folder_path, "independent"))
+                os.makedirs(os.path.join(agent_folder_path, "shared"))
 
 
 if __name__ == "__main__":
-    pass
+    selfplay = SelfPlay("test1")
+
+    print()

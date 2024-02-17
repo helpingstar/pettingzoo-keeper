@@ -1,40 +1,62 @@
 import torch.nn as nn
-
-
-def schedule_matches(n: int = 4, is_symmetry: bool = False):
-    # This function generates the schedule of matches for n teams.
-    assert n % 2 == 0, "n must be even"
-
-    # List to store all rounds
-    schedule = []
-
-    for round in range(n - 1):
-        round_matches = []
-        for match in range(n // 2):
-            team1 = (round + match) % (n - 1)
-            team2 = (n - 1 - match + round) % (n - 1)
-            if (
-                match == 0
-            ):  # Always include the last team in the first match of each round
-                team2 = n - 1
-            # Adjusting team number to be 1-indexed instead of 0-indexed
-            round_matches.append((min(team1, team2), max(team1, team2)))
-        schedule.append(round_matches)
-
-    if not is_symmetry:
-        flipped_match = []
-        for round in schedule:
-            round_matches = []
-            for team1, team2 in round:
-                round_matches.append((team2, team1))
-            flipped_match.append(round_matches)
-        schedule.extend(flipped_match)
-    return schedule
+import yaml
+import os
+from pathlib import Path
 
 
 def copy_network(src: nn.Module, dest: nn.Module):
     dest.load_state_dict(src.state_dict())
 
 
-if __name__ == "__main__":
-    print(schedule_matches())
+def create_files_in_leaf_folders(directory):
+    # 현재 디렉토리가 leaf 디렉토리인지 확인하는 플래그
+    is_leaf = True
+
+    # 현재 디렉토리 내의 모든 항목을 반복
+    for item in os.listdir(directory):
+        item_path = os.path.join(directory, item)
+        # 항목이 디렉토리인 경우 재귀 호출
+        if os.path.isdir(item_path):
+            is_leaf = False
+            create_files_in_leaf_folders(item_path)
+
+    # 현재 디렉토리가 leaf 디렉토리인 경우
+    if is_leaf:
+        # 1.txt, 2.txt, 3.txt, 4.txt 파일 생성
+        for i in range(1, 5):
+            file_path = Path(directory) / f"saved_{i}.txt"
+            file_path.touch()
+        file_path = Path(directory) / f"main.txt"
+        file_path.touch()
+
+
+def delete_files_in_leaf_folders(start_path):
+    # 현재 폴더가 leaf 폴더인지 확인하기 위해 하위 폴더 존재 여부를 체크합니다.
+    is_leaf = True
+    for item in os.listdir(start_path):
+        if os.path.isdir(os.path.join(start_path, item)):
+            # 하위 폴더가 있으면, 현재 폴더는 leaf 폴더가 아니며,
+            # 해당 하위 폴더에 대해 재귀적으로 함수를 호출합니다.
+            is_leaf = False
+            delete_files_in_leaf_folders(os.path.join(start_path, item))
+
+    # 현재 폴더가 leaf 폴더이면, 폴더 내 모든 파일을 삭제합니다.
+    if is_leaf:
+        for item in os.listdir(start_path):
+            item_path = os.path.join(start_path, item)
+            if os.path.isfile(item_path):
+                os.remove(item_path)
+                print(f"Deleted file: {item_path}")
+
+
+def get_all_shared_weights(start_dir):
+    weights_list = []
+
+    for root, dirs, files in os.walk(start_dir):
+        if "independent" in root.split(os.sep):
+            continue
+        for file in files:
+            if "saved" in file:
+                weights_list.append(os.path.join(root, file))
+
+    return weights_list
