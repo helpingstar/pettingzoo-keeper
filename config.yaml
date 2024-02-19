@@ -1,7 +1,0 @@
-experiment_name: test
-agent:
-  n_agent_type: 4
-  agent_type: [normal, neg_on_all_state, pos_on_half, pos_on_quarter_down, pos_on_quarter_up]
-  reward: [null, -0.001, 0.001, 0.001, 0.001]
-selfplay:
-  sub_pool: 20

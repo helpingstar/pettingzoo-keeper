@@ -10,7 +10,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     return layer
 
 
-class Agent(nn.Module):
+class PPOAgent(nn.Module):
     def __init__(self):
         super().__init__()
         self.critic = nn.Sequential(
@@ -21,9 +21,7 @@ class Agent(nn.Module):
             layer_init(nn.Linear(64, 1), std=1.0),
         )
         self.actor = nn.Sequential(
-            layer_init(
-                nn.Linear(36, 64)
-            ),
+            layer_init(nn.Linear(36, 64)),
             nn.Tanh(),
             layer_init(nn.Linear(64, 64)),
             nn.Tanh(),

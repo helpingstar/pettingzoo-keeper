@@ -1,7 +1,8 @@
 import torch.nn as nn
-import yaml
+import numpy as np
 import os
 from pathlib import Path
+import config
 
 
 def copy_network(src: nn.Module, dest: nn.Module):
@@ -23,7 +24,7 @@ def create_files_in_leaf_folders(directory):
     # 현재 디렉토리가 leaf 디렉토리인 경우
     if is_leaf:
         # 1.txt, 2.txt, 3.txt, 4.txt 파일 생성
-        for i in range(1, 5):
+        for i in range(1, 19):
             file_path = Path(directory) / f"saved_{i}.txt"
             file_path.touch()
         file_path = Path(directory) / f"main.txt"
@@ -49,33 +50,38 @@ def delete_files_in_leaf_folders(start_path):
                 print(f"Deleted file: {item_path}")
 
 
-def get_all_shared_weights(start_dir):
-    weights_list = []
-
-    for root, dirs, files in os.walk(start_dir):
-        if "independent" in root.split(os.sep):
-            continue
-        for file in files:
-            if "saved" in file:
-                weights_list.append(os.path.join(root, file))
-
+def get_all_agents_weights(experiment_name, is_shared, is_main):
+    weights_list = dict()
+    for agent in config.agent["agent_type"]:
+        agent_weight = get_weights(experiment_name, agent, is_shared, is_main)
+        weights_list[agent] = agent_weight
     return weights_list
 
 
-def get_independent_weights(start_dir, folder_name, file_keyword):
-    target_dir = os.path.join(start_dir, folder_name, "independent")
-    file_paths = []
-
-    # Check if the target directory exists
-    if not os.path.exists(target_dir):
-        return file_paths
-
-    for root, dirs, files in os.walk(target_dir):
-        # Add the path of files that contain the specified keyword in their name
+def get_weights(experiment_name, agent_name, is_shared, is_main):
+    kind_of_train = "shared" if is_shared else "independent"
+    kind_of_weight = "main" if is_main else "saved"
+    path = os.path.join(experiment_name, agent_name, kind_of_train)
+    weight_list = []
+    for root, dirs, files in os.walk(path):
         for file in files:
-            if file_keyword in file:
-                file_paths.append(os.path.join(root, file))
-    
-    return file_paths
+            if kind_of_weight in file:
+                weight_list.append(os.path.join(root, file))
+    weight_list.sort()
+    return weight_list
+
+
+def get_schedule(n_agent, n_weights, n_divison):
+    schedules = []
+    boundaries = []
+    diff = n_weights / n_divison
+    for i in range(n_divison):
+        boundaries.append(int(i * diff))
+    for i in range(n_agent):
+        weight_nums = [np.random.randint(d, n_weights) for d in boundaries]
+        schedules.append(weight_nums)
+
+    return schedules
+
 
 delete_files_in_leaf_folders("test1")
