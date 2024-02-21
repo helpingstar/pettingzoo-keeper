@@ -4,41 +4,44 @@ import torch.nn as nn
 import torch
 from pettingzoo.utils import ParallelEnv
 from pikazoo import pikazoo_v0
+from network import PPOAgent
 
 
-def evaluate(
+def evaluate_pikazoo(
     n_episode: int,
-    env: ParallelEnv = None,
-    player1: nn.Module = None,
-    player2: nn.Module = None,
+    agent1: PPOAgent,
+    agent2: PPOAgent,
 ):
     winning_count = np.array([0, 0])
     cumulated_score = np.array([0, 0])
-    # env = pikazoo_v0.env(render_mode=None)
+    env = pikazoo_v0.env(render_mode=None)
 
-    # player1.eval()
-    # player2.eval()
+    agent1.eval()
+    agent2.eval()
 
-    # with torch.inference_mode():
-    for i in tqdm(range(n_episode)):
-        observations, infos = env.reset()
-        while env.agents:
-            # this is where you would insert your policy
-            actions = {agent: env.action_space(agent).sample() for agent in env.agents}
-            # actions = {env.possible_agents[0]: player1, env.possible_agents[1]: player2}
-            observations, rewards, terminations, truncations, infos = env.step(actions)
-        if env.physics.player1.is_winner:
-            winning_count[0] += 1
-        else:
-            winning_count[1] += 1
-        cumulated_score[0] += env.scores[0]
-        cumulated_score[1] += env.scores[1]
-    print(cumulated_score, cumulated_score[0] / cumulated_score.sum())
-    print(winning_count, winning_count[0] / winning_count.sum())
-
+    with torch.inference_mode():
+        for i in range(n_episode):
+            observations, infos = env.reset()
+            while env.agents:
+                # this is where you would insert your policy
+                action1 = agent1.get_action_and_value()[0]
+                action2 = agent2.get_action_and_value()[0]
+                actions = {"player_1": action1, "player_2": action2}
+                observations, rewards, terminations, truncations, infos = env.step(
+                    actions
+                )
+            if env.physics.player1.is_winner:
+                winning_count[0] += 1
+            else:
+                winning_count[1] += 1
+            cumulated_score[0] += env.scores[0]
+            cumulated_score[1] += env.scores[1]
     env.close()
+    p1_score_rate = cumulated_score[0] / cumulated_score.sum()
+    p1_winning_rate = winning_count[0] / winning_count.sum()
+
+    return p1_score_rate, p1_winning_rate
 
 
 if __name__ == "__main__":
     env = pikazoo_v0.env()
-    evaluate(1000, env)
