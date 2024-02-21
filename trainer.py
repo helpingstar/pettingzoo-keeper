@@ -7,12 +7,14 @@ from network import PPOAgent
 import torch
 import gc
 import utils
+from pikazoo_ppo_stage import PikaZooPPOStage
+from typing import List, Dict
+import wandb
 
 
 class SelfPlay:
     def __init__(self, experiment_name: str) -> None:
         assert torch.cuda.is_available(), "CUDA IS NOT AVAILABLE"
-
         self.device = "cuda:0"
 
         self.experiment_name = experiment_name
@@ -37,37 +39,11 @@ class SelfPlay:
         }
 
     def get_env(self):
-        self.env_dict = dict()
+        self.envs: Dict[str, PikaZooPPOStage] = dict()
         for i, agent_type in enumerate(self.agent_type):
-            if agent_type == "normal":
-                env = pikazoo_v0.env(render_mode=None)
-                self.env_dict[agent_type] = [env]
-            elif agent_type == "neg_on_all_state":
-                env = pikazoo_v0.env(render_mode=None)
-                env = RewardInNormalState(env, config.agent["reward"][i])
-                self.env_dict[agent_type] = [env]
-            elif agent_type == "pos_on_half":
-                env1 = pikazoo_v0.env(render_mode=None)
-                env1 = RewardByBallPosition(
-                    env1, {1, 4}, config.agent["reward"][i], False
-                )
-                env2 = pikazoo_v0.env(render_mode=None)
-                env2 = RewardByBallPosition(
-                    env2, {1, 4}, config.agent["reward"][i], True
-                )
-                self.env_dict[agent_type] = [env1, env2]
-            elif agent_type == "pos_on_quarter_down":
-                env1 = pikazoo_v0.env(render_mode=None)
-                env1 = RewardByBallPosition(env1, {4}, config.agent["reward"][i], False)
-                env2 = pikazoo_v0.env(render_mode=None)
-                env2 = RewardByBallPosition(env2, {4}, config.agent["reward"][i], True)
-                self.env_dict[agent_type] = [env1, env2]
-            else:  # "pos_on_quarter_up"
-                env1 = pikazoo_v0.env(render_mode=None)
-                env1 = RewardByBallPosition(env1, {1}, config.agent["reward"][i], False)
-                env2 = pikazoo_v0.env(render_mode=None)
-                env2 = RewardByBallPosition(env2, {1}, config.agent["reward"][i], True)
-                self.env_dict[agent_type] = [env1, env2]
+            self.envs[agent_type] = PikaZooPPOStage(
+                agent_type, config.agent["reward"][i]
+            )
 
     def check_number_of_weights(self):
         first_path = os.path.join(self.experiment_name, "normal", "shared")
@@ -117,7 +93,7 @@ class SelfPlay:
                 torch.load(independent_main_weights[agent][0])
             )
 
-    def start(self):
+    def cycle(self):
         self.load_main_agents()
         schedule = utils.get_schedule(
             config.agent["n_agent_type"],
@@ -128,26 +104,47 @@ class SelfPlay:
         shared_saved_weights = utils.get_all_agents_weights(
             self.experiment_name, True, False
         )
-
-        for div_idx in range(config.selfplay["weight_divison"]):
-            for agent_idx, agent in enumerate(self.agent_type):
-                self.shared_saved_agents[agent].load_state_dict(
-                    torch.load(
-                        shared_saved_weights[agent][schedule[agent_idx][div_idx]]
-                    )
-                )
-
-                # train self.shared_main_agents[agent] and self.shared_saved_agents[agent]
-
         # load independent saved
         independent_saved_weights = utils.get_all_agents_weights(
             self.experiment_name, False, False
         )
 
-        # TODO
-        # train independent
+        for agent_train_idx, agent_train in enumerate(self.agent_type):
+            for div_idx in range(config.selfplay["weight_divison"]):
+                for agent_opp_idx, agent_opp in enumerate(self.agent_type):
+                    self.shared_saved_agents[agent_opp].load_state_dict(
+                        torch.load(
+                            shared_saved_weights[agent_opp][
+                                schedule[agent_opp_idx][div_idx]
+                            ]
+                        )
+                    )
+                    self.envs["agent_train"].train(
+                        self.shared_main_agents, self.shared_saved_agents
+                    )
+
+        for agent_train_idx, agent_train in enumerate(self.agent_type):
+            for div_idx in range(config.selfplay["weight_divison"]):
+                for agent_opp_idx, agent_opp in enumerate(self.agent_type):
+                    self.independent_saved_agents[agent_opp].load_state_dict(
+                        torch.load(
+                            independent_saved_weights[agent_train][
+                                schedule[agent_opp_idx][div_idx]
+                            ]
+                        )
+                    )
+                    self.envs["agent_train"].train(
+                        self.independent_main_agents, self.independent_saved_agents
+                    )
+
         # evaluate
         # save weight
+
+    def start(self):
+        self.check_number_of_weights()
+
+        # for
+        #    cycle
 
 
 if __name__ == "__main__":
