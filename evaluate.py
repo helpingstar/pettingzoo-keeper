@@ -1,8 +1,5 @@
 import numpy as np
-from tqdm import tqdm
-import torch.nn as nn
 import torch
-from pettingzoo.utils import ParallelEnv
 from pikazoo import pikazoo_v0
 from network import PPOAgent
 

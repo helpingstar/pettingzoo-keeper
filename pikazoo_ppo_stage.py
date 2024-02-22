@@ -9,12 +9,14 @@ import torch.optim as optim
 import time
 import torch.nn as nn
 from pettingzoo.utils import ParallelEnv
+import wandb
+import config
 
 
 class PikaZooPPOStage:
     def __init__(self, agent_type, reward=None) -> None:
-        assert (agent_type == "normal" and reward is None) or (
-            agent_type != "normal" and reward is not None
+        assert (agent_type == "nml" and reward is None) or (
+            agent_type != "nml" and reward is not None
         )
         self.agent_type = agent_type
         self.reward = reward
@@ -33,57 +35,49 @@ class PikaZooPPOStage:
             setattr(self, key, value)
 
     def get_env_list(self):
-        if self.agent_type == "normal":
-            env = pikazoo_v0.env(render_mode=None)
+        assert self.agent_type in config.agent["agent_type"]
+        if self.agent_type == "nml":
+            env = pikazoo_v0.env(**config.env)
             self.env_list = [env]
-        elif self.agent_type == "neg_on_all_state":
-            env = pikazoo_v0.env(render_mode=None)
+        elif self.agent_type == "nal":
+            env = pikazoo_v0.env(**config.env)
             env = RewardInNormalState(env, self.reward)
             self.env_list = [env]
-        elif self.agent_type == "pos_on_half":
-            env1 = pikazoo_v0.env(render_mode=None)
+        elif self.agent_type == "phf":
+            env1 = pikazoo_v0.env(**config.env)
             env1 = RewardByBallPosition(env1, {1, 4}, self.reward, False)
-            env2 = pikazoo_v0.env(render_mode=None)
+            env2 = pikazoo_v0.env(**config.env)
             env2 = RewardByBallPosition(env2, {1, 4}, self.reward, True)
             self.env_list = [env1, env2]
-        elif self.agent_type == "pos_on_quarter_down":
-            env1 = pikazoo_v0.env(render_mode=None)
+        elif self.agent_type == "pqd":
+            env1 = pikazoo_v0.env(**config.env)
             env1 = RewardByBallPosition(env1, {4}, self.reward, False)
-            env2 = pikazoo_v0.env(render_mode=None)
+            env2 = pikazoo_v0.env(**config.env)
             env2 = RewardByBallPosition(env2, {4}, self.reward, True)
             self.env_list = [env1, env2]
-        else:  # "pos_on_quarter_up"
-            env1 = pikazoo_v0.env(render_mode=None)
+        else:  # pqu, "pos_on_quarter_up"
+            env1 = pikazoo_v0.env(**config.env)
             env1 = RewardByBallPosition(env1, {1}, self.reward, False)
-            env2 = pikazoo_v0.env(render_mode=None)
+            env2 = pikazoo_v0.env(**config.env)
             env2 = RewardByBallPosition(env2, {1}, self.reward, True)
             self.env_list = [env1, env2]
 
         self.n_env = len(self.env_list)
 
     def train(self, agent_train, agent_no_train, run_name):
-        for is_right in range(2):  # is_right: 0=left, 1=right
+        for is_right, side in enumerate(["l", "r"]):  # is_right: 0=left, 1=right
             if self.n_env == 1:
                 env = self.env_list[0]
             else:
                 env = self.env_list[is_right]
-            self.train_one_side(env, agent_train, agent_no_train, is_right, run_name)
+            self.train_one_side(
+                env, agent_train, agent_no_train, is_right, f"{run_name}_{side}"
+            )
 
     def train_one_side(
         self, env: ParallelEnv, agent_train, agent_no_train, is_right, run_name
     ):
         assert is_right in (0, 1)
-        if self.track:
-            import wandb
-
-            wandb.init(
-                project=self.wandb_project_name,
-                entity=self.wandb_entity,
-                config=vars(self),
-                name=run_name,
-                # monitor_gym=True,
-                # save_code=True,
-            )
         # TRY NOT TO MODIFY: seeding
         self.is_right = is_right
         player_train = env.possible_agents[self.is_right]
@@ -163,8 +157,9 @@ class PikaZooPPOStage:
                 if terminations[player_train] or truncations[player_train]:
                     wandb.log(
                         {
-                            "charts/score": infos[player_train]["score"]
-                            - infos[player_no_train]["score"]
+                            f"charts/score/{run_name}": infos[player_train]["score"]
+                            - infos[player_no_train]["score"],
+                            "global_step": global_step,
                         }
                     )
                     next_obs, infos = env.reset()
@@ -180,7 +175,7 @@ class PikaZooPPOStage:
                 next_done = torch.Tensor(next_done).to(device)
             # bootstrap value if not done
             with torch.no_grad():
-                next_value = agent_train.get_value(next_obs).reshape(1, -1)
+                next_value = agent_train.get_value(next_obs_train).reshape(1, -1)
                 advantages = torch.zeros_like(rewards).to(device)
                 lastgaelam = 0
                 for t in reversed(range(self.num_steps)):
@@ -282,20 +277,18 @@ class PikaZooPPOStage:
             )
 
             # TRY NOT TO MODIFY: record rewards for plotting purposes
-            wandb.log(
-                {"charts/learning_rate": optimizer.param_groups[0]["lr"]},
-                step=global_step,
-            )
-            wandb.log({"losses/value_loss": v_loss.item()}, step=global_step)
-            wandb.log({"losses/policy_loss": pg_loss.item()}, step=global_step)
-            wandb.log({"losses/entropy": entropy_loss.item()}, step=global_step)
-            wandb.log({"losses/old_approx_kl": old_approx_kl.item()}, step=global_step)
-            wandb.log({"losses/approx_kl": approx_kl.item()}, step=global_step)
-            wandb.log({"losses/clipfrac": np.mean(clipfracs)}, step=global_step)
-            wandb.log({"losses/explained_variance": explained_var}, step=global_step)
-            wandb.log(
-                {"charts/SPS": int(global_step / (time.time() - start_time))},
-                step=global_step,
-            )
+            log = {
+                f"charts/learning_rate/{run_name}": optimizer.param_groups[0]["lr"],
+                f"losses/value_loss/{run_name}": v_loss.item(),
+                f"losses/policy_loss/{run_name}": pg_loss.item(),
+                f"losses/entropy/{run_name}": entropy_loss.item(),
+                f"losses/old_approx_kl/{run_name}": old_approx_kl.item(),
+                f"losses/approx_kl/{run_name}": approx_kl.item(),
+                f"losses/clipfrac/{run_name}": np.mean(clipfracs),
+                f"losses/explained_variance/{run_name}": explained_var,
+                f"charts/SPS/{run_name}": int(global_step / (time.time() - start_time)),
+                f"global_step": global_step,
+            }
+            wandb.log(log)
 
         env.close()

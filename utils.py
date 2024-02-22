@@ -25,10 +25,23 @@ def create_files_in_leaf_folders(directory):
     if is_leaf:
         # 1.txt, 2.txt, 3.txt, 4.txt 파일 생성
         for i in range(1, 19):
-            file_path = Path(directory) / f"saved_{i}.txt"
+            file_path = Path(directory) / f"saved_{i:03d}.txt"
             file_path.touch()
         file_path = Path(directory) / f"main.txt"
         file_path.touch()
+
+
+def init_dir(experiment_name):
+    # Create a experiment folder
+    os.makedirs(experiment_name)
+
+    for agent_type in config.agent["agent_type"]:
+        agent_folder_path = os.path.join(experiment_name, agent_type)
+        os.makedirs(agent_folder_path)
+        path_independent = os.path.join(agent_folder_path, "independent")
+        path_shared = os.path.join(agent_folder_path, "shared")
+        os.makedirs(path_independent)
+        os.makedirs(path_shared)
 
 
 def delete_files_in_leaf_folders(start_path):
@@ -84,4 +97,5 @@ def get_schedule(n_agent, n_weights, n_divison):
     return schedules
 
 
-delete_files_in_leaf_folders("test1")
+def get_run_name(div_idx, agent_opp, agent_opp_idx, schedule):
+    return f"{div_idx * 5 + agent_opp_idx:03d}_{agent_opp}_{schedule[agent_opp_idx][div_idx]:03d}"

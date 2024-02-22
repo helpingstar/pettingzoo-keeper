@@ -32,10 +32,12 @@ class SelfPlay:
             agent_type: PPOAgent().to(self.device) for agent_type in self.agent_type
         }
         self.shared_saved_agents = {
-            agent_type: PPOAgent().to(self.device) for agent_type in self.agent_type
+            agent_type: PPOAgent().to(self.device).eval()
+            for agent_type in self.agent_type
         }
         self.independent_saved_agents = {
-            agent_type: PPOAgent().to(self.device) for agent_type in self.agent_type
+            agent_type: PPOAgent().to(self.device).eval()
+            for agent_type in self.agent_type
         }
 
     def get_env(self):
@@ -46,7 +48,9 @@ class SelfPlay:
             )
 
     def check_number_of_weights(self):
-        first_path = os.path.join(self.experiment_name, "normal", "shared")
+        first_path = os.path.join(
+            self.experiment_name, config.agent["agent_type"][0], "shared"
+        )
         self.n_weights = len(os.listdir(first_path))
         for agent in self.agent_type:
             for type in ("independent", "shared"):
@@ -54,6 +58,8 @@ class SelfPlay:
                 assert self.n_weights == len(
                     os.listdir(path)
                 ), f"n_weight: {self.n_weights}, {path}: {len(os.listdir(path))}"
+        # Subtract 1 from the number of files because self.n_weight is calculated excluding main.pth.
+        self.n_weights -= 1
 
     def init_weights(self):
         # Create a experiment folder
@@ -69,8 +75,12 @@ class SelfPlay:
 
             network = PPOAgent()
             network = network.to(self.device)
-            torch.save(network.state_dict(), path_independent)
-            torch.save(network.state_dict(), path_shared)
+            torch.save(network.state_dict(), os.path.join(path_independent, "main.pth"))
+            torch.save(
+                network.state_dict(), os.path.join(path_independent, "saved_001.pth")
+            )
+            torch.save(network.state_dict(), os.path.join(path_shared, "main.pth"))
+            torch.save(network.state_dict(), os.path.join(path_shared, "saved_001.pth"))
             # free GPU model
             network.cpu()
             del network
@@ -108,10 +118,24 @@ class SelfPlay:
         independent_saved_weights = utils.get_all_agents_weights(
             self.experiment_name, False, False
         )
-
+        print(f"Start train [shared]")
         for agent_train_idx, agent_train in enumerate(self.agent_type):
+            # wandb logging
+            wandb_config = {
+                "agent_train": agent_train,
+                "cycle": self.n_weights,
+                "train": "shared",
+            }
+            wandb.init(
+                project=self.experiment_name,
+                name=f"{self.n_weights:03d}_{agent_train}_sh",
+                config=wandb_config,
+            )
             for div_idx in range(config.selfplay["weight_divison"]):
                 for agent_opp_idx, agent_opp in enumerate(self.agent_type):
+                    run_name = utils.get_run_name(
+                        div_idx, agent_opp, agent_opp_idx, schedule
+                    )
                     self.shared_saved_agents[agent_opp].load_state_dict(
                         torch.load(
                             shared_saved_weights[agent_opp][
@@ -119,13 +143,30 @@ class SelfPlay:
                             ]
                         )
                     )
-                    self.envs["agent_train"].train(
-                        self.shared_main_agents, self.shared_saved_agents
+                    self.envs[agent_train].train(
+                        self.shared_main_agents[agent_train],
+                        self.shared_saved_agents[agent_opp],
+                        run_name,
                     )
-
+            wandb.finish()
+        print(f"Start train [independent]")
         for agent_train_idx, agent_train in enumerate(self.agent_type):
+            # wandb logging
+            wandb_config = {
+                "agent_train": agent_train,
+                "cycle": self.n_weights,
+                "train": "independent",
+            }
+            wandb.init(
+                project=self.experiment_name,
+                name=f"{self.n_weights:03d}_{agent_train}_idp",
+                config=wandb_config,
+            )
             for div_idx in range(config.selfplay["weight_divison"]):
                 for agent_opp_idx, agent_opp in enumerate(self.agent_type):
+                    run_name = utils.get_run_name(
+                        div_idx, agent_opp, agent_opp_idx, schedule
+                    )
                     self.independent_saved_agents[agent_opp].load_state_dict(
                         torch.load(
                             independent_saved_weights[agent_train][
@@ -133,21 +174,58 @@ class SelfPlay:
                             ]
                         )
                     )
-                    self.envs["agent_train"].train(
-                        self.independent_main_agents, self.independent_saved_agents
+
+                    self.envs[agent_train].train(
+                        self.independent_main_agents[agent_train],
+                        self.independent_saved_agents[agent_opp],
+                        run_name,
                     )
+            wandb.finish()
 
+        self.save_weights()
         # evaluate
-        # save weight
 
-    def start(self):
-        self.check_number_of_weights()
+    def save_weights(self):
+        for agent_type in self.agent_type:
+            torch.save(
+                self.shared_main_agents[agent_type].state_dict(),
+                os.path.join(
+                    self.experiment_name,
+                    agent_type,
+                    "shared",
+                    f"saved_{self.n_weights+1:03d}",
+                ),
+            )
+            torch.save(
+                self.shared_main_agents[agent_type].state_dict(),
+                os.path.join(
+                    self.experiment_name,
+                    agent_type,
+                    "shared",
+                    f"main",
+                ),
+            )
+            torch.save(
+                self.shared_main_agents[agent_type].state_dict(),
+                os.path.join(
+                    self.experiment_name,
+                    agent_type,
+                    "independent",
+                    f"saved_{self.n_weights+1:03d}",
+                ),
+            )
+            torch.save(
+                self.shared_main_agents[agent_type].state_dict(),
+                os.path.join(
+                    self.experiment_name,
+                    agent_type,
+                    "independent",
+                    f"main",
+                ),
+            )
 
-        # for
-        #    cycle
-
-
-if __name__ == "__main__":
-    selfplay = SelfPlay("test1")
-
-    print()
+    def start(self, n_cycle):
+        for i in range(n_cycle):
+            print(f"Start cycle {i:03d}")
+            self.check_number_of_weights()
+            self.cycle()
