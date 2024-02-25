@@ -1,5 +1,9 @@
 from pikazoo import pikazoo_v0
-from pikazoo.wrappers import RewardInNormalState, RewardByBallPosition
+from pikazoo.wrappers import (
+    RewardInNormalState,
+    RewardByBallPosition,
+    RecordEpisodeStatistics,
+)
 import os
 import numpy as np
 import yaml
@@ -11,6 +15,7 @@ import torch.nn as nn
 from pettingzoo.utils import ParallelEnv
 import wandb
 import config
+import supersuit as ss
 
 
 class PikaZooPPOStage:
@@ -30,37 +35,45 @@ class PikaZooPPOStage:
         args["batch_size"] = int(args["num_envs"] * args["num_steps"])
         args["minibatch_size"] = int(args["batch_size"] // args["num_minibatches"])
         args["num_iterations"] = args["total_timesteps"] // args["batch_size"]
-
         for key, value in args.items():
             setattr(self, key, value)
 
     def get_env_list(self):
         assert self.agent_type in config.agent["agent_type"]
+
+        self.env_list = []
+
         if self.agent_type == "nml":
-            env = pikazoo_v0.env(**config.env)
-            self.env_list = [env]
+            env1 = pikazoo_v0.env(**config.env)
         elif self.agent_type == "nal":
-            env = pikazoo_v0.env(**config.env)
-            env = RewardInNormalState(env, self.reward)
-            self.env_list = [env]
+            env1 = pikazoo_v0.env(**config.env)
+            env1 = RewardInNormalState(env1, self.reward)
         elif self.agent_type == "phf":
             env1 = pikazoo_v0.env(**config.env)
             env1 = RewardByBallPosition(env1, {1, 4}, self.reward, False)
             env2 = pikazoo_v0.env(**config.env)
             env2 = RewardByBallPosition(env2, {1, 4}, self.reward, True)
-            self.env_list = [env1, env2]
         elif self.agent_type == "pqd":
             env1 = pikazoo_v0.env(**config.env)
             env1 = RewardByBallPosition(env1, {4}, self.reward, False)
             env2 = pikazoo_v0.env(**config.env)
             env2 = RewardByBallPosition(env2, {4}, self.reward, True)
-            self.env_list = [env1, env2]
         else:  # pqu, "pos_on_quarter_up"
             env1 = pikazoo_v0.env(**config.env)
             env1 = RewardByBallPosition(env1, {1}, self.reward, False)
             env2 = pikazoo_v0.env(**config.env)
             env2 = RewardByBallPosition(env2, {1}, self.reward, True)
-            self.env_list = [env1, env2]
+
+        env1 = RecordEpisodeStatistics(env1)
+        env1 = ss.dtype_v0(env1, np.float32)
+        env1 = ss.normalize_obs_v0(env1)
+        self.env_list.append(env1)
+
+        if self.agent_type not in ["nml", "nal"]:
+            env2 = RecordEpisodeStatistics(env2)
+            env2 = ss.dtype_v0(env2, np.float32)
+            env2 = ss.normalize_obs_v0(env2)
+            self.env_list.append(env2)
 
         self.n_env = len(self.env_list)
 
@@ -155,13 +168,24 @@ class PikaZooPPOStage:
                     }
                 )
                 if terminations[player_train] or truncations[player_train]:
-                    wandb.log(
-                        {
-                            f"charts/score/{run_name}": infos[player_train]["score"]
-                            - infos[player_no_train]["score"],
-                            "global_step": global_step,
-                        }
-                    )
+                    w_log = {
+                        f"charts/score/{run_name}": infos[player_train]["score"][
+                            self.is_right
+                        ]
+                        - infos[player_no_train]["score"][self.is_right ^ 1],
+                        f"charts/cumulative_reward/{run_name}": infos[player_train][
+                            "episode"
+                        ]["r"],
+                        f"charts/episode_length/{run_name}": infos[player_train][
+                            "episode"
+                        ]["l"],
+                        f"charts/frame_per_round/{run_name}": infos[player_train][
+                            "episode"
+                        ]["l"]
+                        // sum(infos[player_train]["score"]),
+                        "global_step": global_step,
+                    }
+                    wandb.log(w_log)
                     next_obs, infos = env.reset()
                 next_obs_train = next_obs[player_train]
                 reward = reward[player_train]

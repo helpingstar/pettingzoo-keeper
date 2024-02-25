@@ -71,6 +71,15 @@ def get_all_agents_weights(experiment_name, is_shared, is_main):
     return weights_list
 
 
+def get_all_saved_weights_list(experiment_name, is_shared):
+    result = []
+    temp = get_all_agents_weights(experiment_name, is_shared, False)
+    for li in temp.values():
+        result.extend(li)
+    result.sort(key=lambda x: (x[-7:], x))
+    return result
+
+
 def get_weights(experiment_name, agent_name, is_shared, is_main):
     kind_of_train = "shared" if is_shared else "independent"
     kind_of_weight = "main" if is_main else "saved"
@@ -84,9 +93,11 @@ def get_weights(experiment_name, agent_name, is_shared, is_main):
     return weight_list
 
 
-def get_schedule(n_agent, n_weights, n_divison):
+def get_schedule(n_agent, n_weights, n_divison, get_all_weights=False):
     schedules = []
     boundaries = []
+    if get_all_weights:
+        n_weights *= n_agent
     diff = n_weights / n_divison
     for i in range(n_divison):
         boundaries.append(int(i * diff))
@@ -99,3 +110,17 @@ def get_schedule(n_agent, n_weights, n_divison):
 
 def get_run_name(div_idx, agent_opp, agent_opp_idx, schedule):
     return f"{div_idx * 5 + agent_opp_idx:03d}_{agent_opp}_{schedule[agent_opp_idx][div_idx]:03d}"
+
+
+def get_info_by_path(path: str):
+    infos = path.split("/")
+    return infos[0], infos[1], infos[2], infos[3]
+
+
+if __name__ == "__main__":
+    # init_dir("ex2")
+    # create_files_in_leaf_folders("ex2")
+    # paths = get_all_saved_weights_list("ex2", True)
+    # print(paths)
+    # print(os.path.split(paths[0]))
+    print(get_schedule(5, 10, 3, True))

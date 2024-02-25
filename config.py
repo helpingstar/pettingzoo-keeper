@@ -10,6 +10,6 @@ agent = {
     ],
     "reward": [None, -0.001, 0.001, 0.001, 0.001],
 }
-selfplay = {"weight_divison": 5}
+selfplay = {"weight_divison": 3}
 wandb = {"silent": "true"}
-env = {"winning_score": 5}
+env = {"winning_score": 15}

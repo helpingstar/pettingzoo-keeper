@@ -5,11 +5,10 @@ track: true
 wandb_project_name: "pika-zoo"
 wandb_entity: null
 capture_video: false
-env_id: "CartPole-v1"
 total_timesteps: 5000000
 learning_rate: 2.5e-4
 num_envs: 1
-num_steps: 128
+num_steps: 512
 anneal_lr: false
 gamma: 0.99
 gae_lambda: 0.95
