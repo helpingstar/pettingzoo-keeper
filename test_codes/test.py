@@ -1,13 +1,17 @@
 import gymnasium as gym
+from pikazoo import pikazoo_v0
+from pikazoo.wrappers import ConvertSingleAgent
 
 
-def make_env(env_id, idx, capture_video, run_name):
+def make_env(idx, capture_video, run_name):
     def thunk():
         if capture_video and idx == 0:
-            env = gym.make(env_id, render_mode="rgb_array")
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+            env = pikazoo_v0.env(is_player2_computer=True)
+            env = ConvertSingleAgent(env, "player_1")
+            # env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
         else:
-            env = gym.make(env_id)
+            env = pikazoo_v0.env(is_player2_computer=True)
+            env = ConvertSingleAgent(env, "player_1")
         env = gym.wrappers.RecordEpisodeStatistics(env)
         return env
 
@@ -15,7 +19,7 @@ def make_env(env_id, idx, capture_video, run_name):
 
 
 envs = gym.vector.SyncVectorEnv(
-    [make_env("CliffWalking-v0", i, False, "hi") for i in range(2)],
+    [make_env(i, False, "hi") for i in range(2)],
 )
 
 envs.reset()
