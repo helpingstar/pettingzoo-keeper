@@ -5,10 +5,8 @@ agent = {
         "nml",  # normal
         "nal",  # negative all
         "phf",  # positive half
-        "pqd",  # positive quarter down
-        "pqu",  # positive quarter up
     ],
-    "reward": [None, -0.001, 0.001, 0.001, 0.001],
+    "reward": [None, -0.001, 0.001],
 }
 selfplay = {"weight_divison": 3}
 wandb = {"silent": "true"}
