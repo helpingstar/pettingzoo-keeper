@@ -11,7 +11,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class PPOAgent(nn.Module):
-    def __init__(self, train_type, agent_type, weight_type):
+    def __init__(self, train_type="", agent_type="", weight_type=""):
         super().__init__()
         self.critic = nn.Sequential(
             layer_init(nn.Linear(36, 64)),
