@@ -11,7 +11,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class PPOAgent(nn.Module):
-    def __init__(self):
+    def __init__(self, train_type, agent_type, weight_type):
         super().__init__()
         self.critic = nn.Sequential(
             layer_init(nn.Linear(36, 64)),
@@ -27,6 +27,30 @@ class PPOAgent(nn.Module):
             nn.Tanh(),
             layer_init(nn.Linear(64, 18), std=0.01),
         )
+
+        # shared / independent
+        self._train_type = train_type
+        # nml / nal / phf
+        self._agent_type = agent_type
+        # main / saved
+        self._weight_type = weight_type
+
+        print(f"Create PPOAgent {self.net_info()}")
+
+    def net_info(self):
+        return f"{self._train_type} {self._agent_type} {self._weight_type}"
+
+    @property
+    def train_type(self):
+        return self._train_type
+
+    @property
+    def agent_type(self):
+        return self._agent_type
+
+    @property
+    def weight_type(self):
+        return self._weight_type
 
     def get_value(self, x):
         return self.critic(x)
