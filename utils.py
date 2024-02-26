@@ -3,6 +3,8 @@ import numpy as np
 import os
 from pathlib import Path
 import config
+import torch
+from network import PPOAgent
 
 
 def copy_network(src: nn.Module, dest: nn.Module):
@@ -115,6 +117,16 @@ def get_run_name(div_idx, agent_opp, agent_opp_idx, schedule):
 def get_info_by_path(path: str):
     infos = path.split("/")
     return infos[0], infos[1], infos[2], infos[3]
+
+
+def load_weights(dst: PPOAgent, src: str, tab: int = 0):
+    print(f"{' '*(2*tab)}{dst.net_info()} <- {src}")
+    dst.load_state_dict(torch.load(src))
+
+
+def save_weights(net: PPOAgent, path: str, tab: int = 0):
+    print(f"{' '*(2*tab)}{net.net_info()} -> {path}")
+    torch.save(net.state_dict(), path)
 
 
 if __name__ == "__main__":

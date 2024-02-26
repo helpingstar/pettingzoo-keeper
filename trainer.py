@@ -30,14 +30,22 @@ class SelfPlay:
 
         self.check_number_of_weights(self.train_shared, self.train_independent)
         self.get_env()
-        self.shared_main_agents = {
-            agent_type: PPOAgent().to(self.device) for agent_type in self.agent_type
-        }
-        self.independent_main_agents = {
-            agent_type: PPOAgent().to(self.device) for agent_type in self.agent_type
-        }
-        self.shared_saved_agents = PPOAgent().to(self.device).eval()
-        self.independent_saved_agents = PPOAgent().to(self.device).eval()
+        if self.train_shared:
+            self.shared_main_agents = {
+                agent_type: PPOAgent("shared", agent_type, "main").to(self.device)
+                for agent_type in self.agent_type
+            }
+            self.shared_saved_agents = (
+                PPOAgent("shared", "None", "saved").to(self.device).eval()
+            )
+        if self.train_independent:
+            self.independent_main_agents = {
+                agent_type: PPOAgent("independent", agent_type, "main").to(self.device)
+                for agent_type in self.agent_type
+            }
+            self.independent_saved_agents = (
+                PPOAgent("independent", "None", "saved").to(self.device).eval()
+            )
 
     def get_env(self):
         self.envs: Dict[str, PikaZooPPOStage] = dict()
@@ -72,21 +80,25 @@ class SelfPlay:
         os.makedirs(self.experiment_name)
 
         for agent_type in self.agent_type:
+            network = PPOAgent("None", "None", "None")
+            network = network.to(self.device)
+
             agent_folder_path = os.path.join(self.experiment_name, agent_type)
             os.makedirs(agent_folder_path)
-            path_independent = os.path.join(agent_folder_path, "independent")
-            path_shared = os.path.join(agent_folder_path, "shared")
-            os.makedirs(path_independent)
-            os.makedirs(path_shared)
+            if self.train_shared:
+                path_shared = os.path.join(agent_folder_path, "shared")
+                os.makedirs(path_shared)
+                utils.save_weights(network, os.path.join(path_shared, "main.pth"))
+                utils.save_weights(network, os.path.join(path_shared, "saved_001.pth"))
 
-            network = PPOAgent()
-            network = network.to(self.device)
-            torch.save(network.state_dict(), os.path.join(path_independent, "main.pth"))
-            torch.save(
-                network.state_dict(), os.path.join(path_independent, "saved_001.pth")
-            )
-            torch.save(network.state_dict(), os.path.join(path_shared, "main.pth"))
-            torch.save(network.state_dict(), os.path.join(path_shared, "saved_001.pth"))
+            if self.train_independent:
+                path_independent = os.path.join(agent_folder_path, "independent")
+                os.makedirs(path_independent)
+                utils.save_weights(network, os.path.join(path_independent, "main.pth"))
+                utils.save_weights(
+                    network, os.path.join(path_independent, "saved_001.pth")
+                )
+
             # free GPU model
             network.cpu()
             del network
@@ -94,20 +106,25 @@ class SelfPlay:
         torch.cuda.empty_cache()
 
     def load_main_agents(self):
-        shared_main_weights = utils.get_all_agents_weights(
-            self.experiment_name, True, True
-        )
-        independent_main_weights = utils.get_all_agents_weights(
-            self.experiment_name, False, True
-        )
+        if self.train_shared:
+            shared_main_weights = utils.get_all_agents_weights(
+                self.experiment_name, True, True
+            )
+        if self.train_independent:
+            independent_main_weights = utils.get_all_agents_weights(
+                self.experiment_name, False, True
+            )
 
         for agent in self.agent_type:
-            self.shared_main_agents[agent].load_state_dict(
-                torch.load(shared_main_weights[agent][0])
-            )
-            self.independent_main_agents[agent].load_state_dict(
-                torch.load(independent_main_weights[agent][0])
-            )
+            if self.train_shared:
+                utils.load_weights(
+                    self.shared_main_agents[agent], shared_main_weights[agent][0]
+                )
+            if self.train_independent:
+                utils.load_weights(
+                    self.independent_main_agents[agent],
+                    independent_main_weights[agent][0],
+                )
 
     # 1 cycle : train (n_agnet_type * weight_division)
     def cycle1(self):
@@ -143,12 +160,11 @@ class SelfPlay:
                     run_name = utils.get_run_name(
                         div_idx, agent_opp, agent_opp_idx, schedule
                     )
-                    self.shared_saved_agents.load_state_dict(
-                        torch.load(
-                            shared_saved_weights[agent_opp][
-                                schedule[agent_opp_idx][div_idx]
-                            ]
-                        )
+                    utils.load_weights(
+                        self.shared_saved_agents,
+                        shared_saved_weights[agent_opp][
+                            schedule[agent_opp_idx][div_idx]
+                        ],
                     )
                     self.envs[agent_train].train(
                         self.shared_main_agents[agent_train],
@@ -174,12 +190,11 @@ class SelfPlay:
                     run_name = utils.get_run_name(
                         div_idx, agent_opp, agent_opp_idx, schedule
                     )
-                    self.independent_saved_agents[agent_opp].load_state_dict(
-                        torch.load(
-                            independent_saved_weights[agent_train][
-                                schedule[agent_opp_idx][div_idx]
-                            ]
-                        )
+                    utils.load_weights(
+                        self.independent_saved_agents[agent_opp],
+                        independent_saved_weights[agent_train][
+                            schedule[agent_opp_idx][div_idx]
+                        ],
                     )
 
                     self.envs[agent_train].train(
@@ -194,7 +209,7 @@ class SelfPlay:
 
     # shared vs shared
     def cycle2(self, n):
-        print(f"Start cycle {n:03d}")
+        print(f"[Start cycle {n:03d}]")
         self.load_main_agents()
         schedule = utils.get_schedule(
             config.agent["n_agent_type"],
@@ -209,7 +224,7 @@ class SelfPlay:
         )
         print(f"Number of weights: {len(shared_saved_weights)}")
         for agent_train_idx, agent_train in enumerate(self.agent_type):
-            print(f"Train {agent_train}")
+            print(f"  [Train {agent_train}] | cycle: {n}")
             # wandb logging
             wandb_config = {
                 "agent_train": agent_train,
@@ -226,10 +241,12 @@ class SelfPlay:
                 _, agent_opp, _, file_name = utils.get_info_by_path(
                     shared_saved_weights[sche_idx]
                 )
-                print(f"main {agent_train} VS {agent_opp}_{file_name} / {sche_idx}")
+                print(
+                    f"    [main {agent_train} VS {agent_opp}_{file_name} / {sche_idx}]"
+                )
                 run_name = f"{div_idx:03d}_{agent_opp}_{sche_idx}"
-                self.shared_saved_agents.load_state_dict(
-                    torch.load(shared_saved_weights[sche_idx])
+                utils.load_weights(
+                    self.shared_saved_agents, shared_saved_weights[sche_idx], 2
                 )
                 self.envs[agent_train].train(
                     self.shared_main_agents[agent_train],
@@ -238,49 +255,53 @@ class SelfPlay:
                 )
             wandb.finish()
 
-        self.save_weights(save_shared=True, save_independent=False)
+        self.save_weights(1)
         # evaluate
 
-    def save_weights(self, save_shared=True, save_independent=True):
-        print("Saving Weights")
+    def save_weights(self, tab=0):
+        print(f"{' '*(2*tab)}Saving Weights")
         for agent_type in self.agent_type:
-            if save_shared:
-                torch.save(
-                    self.shared_main_agents[agent_type].state_dict(),
+            if self.train_shared:
+                utils.save_weights(
+                    self.shared_main_agents[agent_type],
                     os.path.join(
                         self.experiment_name,
                         agent_type,
                         "shared",
                         f"saved_{self.n_weights+1:03d}.pth",
                     ),
+                    tab,
                 )
-                torch.save(
-                    self.shared_main_agents[agent_type].state_dict(),
+                utils.save_weights(
+                    self.shared_main_agents[agent_type],
                     os.path.join(
                         self.experiment_name,
                         agent_type,
                         "shared",
                         "main.pth",
                     ),
+                    tab,
                 )
-            if save_independent:
-                torch.save(
-                    self.independent_main_agents[agent_type].state_dict(),
+            if self.train_independent:
+                utils.save_weights(
+                    self.independent_main_agents[agent_type],
                     os.path.join(
                         self.experiment_name,
                         agent_type,
                         "independent",
                         f"saved_{self.n_weights+1:03d}.pth",
                     ),
+                    tab,
                 )
-                torch.save(
-                    self.independent_main_agents[agent_type].state_dict(),
+                utils.save_weights(
+                    self.independent_main_agents[agent_type],
                     os.path.join(
                         self.experiment_name,
                         agent_type,
                         "independent",
                         "main.pth",
                     ),
+                    tab,
                 )
 
     def start(self, n_cycle):
