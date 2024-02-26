@@ -1,6 +1,6 @@
 experiment_name = "test"
 agent = {
-    "n_agent_type": 5,
+    "n_agent_type": 3,
     "agent_type": [
         "nml",  # normal
         "nal",  # negative all
