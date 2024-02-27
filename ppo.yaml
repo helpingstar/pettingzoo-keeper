@@ -5,7 +5,7 @@ track: true
 wandb_project_name: "pika-zoo"
 wandb_entity: null
 capture_video: false
-total_timesteps: 5000000
+total_timesteps: 1000000
 learning_rate: 2.5e-4
 num_envs: 1
 num_steps: 512
