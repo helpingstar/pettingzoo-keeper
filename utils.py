@@ -5,6 +5,7 @@ from pathlib import Path
 import config
 import torch
 from network import PPOAgent
+from typing import List, Dict
 
 
 def copy_network(src: nn.Module, dest: nn.Module):
@@ -65,7 +66,19 @@ def delete_files_in_leaf_folders(start_path):
                 print(f"Deleted file: {item_path}")
 
 
-def get_all_agents_weights(experiment_name, is_shared, is_main):
+def get_all_agents_weights(
+    experiment_name: str, is_shared: bool, is_main: bool
+) -> Dict[str, List[str]]:
+    """A function that classifies and returns weights for each agent type.
+
+    Args:
+        experiment_name (str): Name of experiment
+        is_shared (bool): shared or independent
+        is_main (bool): main or saved
+
+    Returns:
+        Dict[str, List[str]]: The key corresponds to the agent type, and the value stores a list of weight paths that meet the condition.
+    """
     weights_list = dict()
     for agent in config.agent["agent_type"]:
         agent_weight = get_weights(experiment_name, agent, is_shared, is_main)
@@ -73,7 +86,16 @@ def get_all_agents_weights(experiment_name, is_shared, is_main):
     return weights_list
 
 
-def get_all_saved_weights_list(experiment_name, is_shared):
+def get_all_saved_weights_list(experiment_name: str, is_shared: bool) -> List[str]:
+    """Stores all weights in a single list. They are sorted in ascending order by time.
+
+    Args:
+        experiment_name (str): name of experiment
+        is_shared (bool): shared or independent
+
+    Returns:
+        List[str]: List composed of Paths
+    """
     result = []
     temp = get_all_agents_weights(experiment_name, is_shared, False)
     for li in temp.values():
