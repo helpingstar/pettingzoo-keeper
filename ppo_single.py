@@ -17,6 +17,7 @@ from pikazoo.wrappers import (
     ConvertSingleAgent,
     RewardByBallPosition,
     RecordEpisodeStatistics,
+    RewardInNormalState,
 )
 import supersuit as ss
 import wandb
@@ -52,7 +53,7 @@ class Args:
     """the number of parallel game environments"""
     num_steps: int = 512
     """the number of steps to run in each environment per policy rollout"""
-    anneal_lr: bool = True
+    anneal_lr: bool = False
     """Toggle learning rate annealing for policy and value networks"""
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -86,7 +87,9 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
     #
-    side: str = "player_1"
+    agent_idx: int = 0
+    record_interval: int = 100
+    winning_score: int = 15
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -99,22 +102,18 @@ class Agent(nn.Module):
     def __init__(self, env):
         super().__init__()
         self.critic = nn.Sequential(
-            layer_init(
-                nn.Linear(np.array(env.observation_space("player_1").shape).prod(), 128)
-            ),
+            layer_init(nn.Linear(36, 128)),
             nn.ReLU(),
             layer_init(nn.Linear(128, 128)),
             nn.ReLU(),
             layer_init(nn.Linear(128, 1), std=1.0),
         )
         self.actor = nn.Sequential(
-            layer_init(
-                nn.Linear(np.array(env.observation_space("player_1").shape).prod(), 128)
-            ),
+            layer_init(nn.Linear(36, 128)),
             nn.ReLU(),
             layer_init(nn.Linear(128, 128)),
             nn.ReLU(),
-            layer_init(nn.Linear(128, env.action_space("player_1").n), std=0.01),
+            layer_init(nn.Linear(128, 18), std=0.01),
         )
 
     def get_value(self, x):
@@ -129,7 +128,13 @@ class Agent(nn.Module):
 
 
 if __name__ == "__main__":
+    int_to_agnet = ["player_1", "player_2"]
     args = tyro.cli(Args)
+    args.agent_o_idx = args.agent_idx ^ 1
+    args.agent = int_to_agnet[args.agent_idx]
+    args.agent_o = int_to_agnet[args.agent_o_idx]
+    args.is_right = bool(args.agent_idx)
+    args.is_left = not args.is_right
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
@@ -162,16 +167,22 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    env = pikazoo_v0.env(render_mode="rgb_array", is_player2_computer=True)
-    env = RewardByBallPosition(env, {1, 4}, 0.0001, False)
+    env = pikazoo_v0.env(
+        winning_score=args.winning_score,
+        render_mode="rgb_array",
+        is_player1_computer=args.is_right,
+        is_player2_computer=args.is_left,
+    )
+    # env = RewardInNormalState(env, -0.001)
+    env = RewardByBallPosition(env, {1, 4}, 0.002, args.is_right)
     env = RecordEpisodeStatistics(env)
     env = ss.dtype_v0(env, np.float32)
     env = ss.normalize_obs_v0(env)
-    env = ConvertSingleAgent(env, "player_1")
+    env = ConvertSingleAgent(env, args.agent)
     env = RecordVideoV0(
         env=env,
         video_folder=f"videos/{run_name}",
-        episode_trigger=lambda x: x % 100 == 0,
+        episode_trigger=lambda x: x % args.record_interval == 0,
     )
 
     agent = Agent(env).to(device)
@@ -179,10 +190,10 @@ if __name__ == "__main__":
 
     # ALGO Logic: Storage setup
     obs = torch.zeros(
-        (args.num_steps, args.num_envs) + env.observation_space("player_1").shape
+        (args.num_steps, args.num_envs) + env.observation_space(args.agent).shape
     ).to(device)
     actions = torch.zeros(
-        (args.num_steps, args.num_envs) + env.action_space("player_1").shape
+        (args.num_steps, args.num_envs) + env.action_space(args.agent).shape
     ).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -219,10 +230,12 @@ if __name__ == "__main__":
             next_obs, reward, terminations, truncations, infos = env.step(
                 action.cpu().numpy()
             )
-
+            # print(reward)
             if terminations or truncations:
                 writer.add_scalar(
-                    "charts/score", infos["score"][0] - infos["score"][1], global_step
+                    "charts/score",
+                    infos["score"][args.agent_idx] - infos["score"][args.agent_o_idx],
+                    global_step,
                 )
                 writer.add_scalar(
                     "charts/cumulative_reward", infos["episode"]["r"], global_step
@@ -264,9 +277,9 @@ if __name__ == "__main__":
             returns = advantages + values
 
         # flatten the batch
-        b_obs = obs.reshape((-1,) + env.observation_space("player_1").shape)
+        b_obs = obs.reshape((-1,) + env.observation_space(args.agent).shape)
         b_logprobs = logprobs.reshape(-1)
-        b_actions = actions.reshape((-1,) + env.action_space("player_1").shape)
+        b_actions = actions.reshape((-1,) + env.action_space(args.agent).shape)
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
