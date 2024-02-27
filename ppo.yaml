@@ -1,5 +1,5 @@
 seed: 1
-torch_deterministic: true
+torch_deterministic: false
 cuda: true
 track: true
 wandb_project_name: "pika-zoo"

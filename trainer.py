@@ -32,19 +32,19 @@ class SelfPlay:
         self.get_env()
         if self.train_shared:
             self.shared_main_agents = {
-                agent_type: PPOAgent("shared", agent_type, "main").to(self.device)
+                agent_type: PPOAgent(f"shared {agent_type} main").to(self.device)
                 for agent_type in self.agent_type
             }
             self.shared_saved_agents = (
-                PPOAgent("shared", "None", "saved").to(self.device).eval()
+                PPOAgent(f"shared_None_saved").to(self.device).eval()
             )
         if self.train_independent:
             self.independent_main_agents = {
-                agent_type: PPOAgent("independent", agent_type, "main").to(self.device)
+                agent_type: PPOAgent(f"independent_{agent_type}_main").to(self.device)
                 for agent_type in self.agent_type
             }
             self.independent_saved_agents = (
-                PPOAgent("independent", "None", "saved").to(self.device).eval()
+                PPOAgent(f"independent_None_saved").to(self.device).eval()
             )
 
     def get_env(self):
@@ -80,7 +80,7 @@ class SelfPlay:
         os.makedirs(self.experiment_name)
 
         for agent_type in self.agent_type:
-            network = PPOAgent("None", "None", "None")
+            network = PPOAgent(f"First Empty Network")
             network = network.to(self.device)
 
             agent_folder_path = os.path.join(self.experiment_name, agent_type)

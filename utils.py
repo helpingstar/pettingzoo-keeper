@@ -120,12 +120,12 @@ def get_info_by_path(path: str):
 
 
 def load_weights(dst: PPOAgent, src: str, tab: int = 0):
-    print(f"{' '*(2*tab)}{dst.net_info()} <- {src}")
+    print(f"{' '*(2*tab)}{dst.name} <- {src}")
     dst.load_state_dict(torch.load(src))
 
 
 def save_weights(net: PPOAgent, path: str, tab: int = 0):
-    print(f"{' '*(2*tab)}{net.net_info()} -> {path}")
+    print(f"{' '*(2*tab)}{net.name} -> {path}")
     torch.save(net.state_dict(), path)
 
 
