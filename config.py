@@ -1,6 +1,5 @@
 experiment_name = "test"
 agent = {
-    "n_agent_type": 3,
     "agent_type": [
         "nml",  # normal
         "nal",  # negative all
@@ -8,6 +7,8 @@ agent = {
     ],
     "reward": [None, -0.001, 0.001],
 }
-selfplay = {"weight_divison": 3}
+selfplay = {"weight_divison": 2}
 wandb = {"silent": "true"}
-env = {"winning_score": 15}
+env = {"winning_score": 5}
+
+agent["n_agent_type"] = len(agent["agent_type"])
