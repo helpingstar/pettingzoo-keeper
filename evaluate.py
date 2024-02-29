@@ -8,6 +8,7 @@ import utils
 import config
 import os
 from time import time
+from typing import List
 
 
 class SharedEvaluater:
@@ -35,11 +36,17 @@ class SharedEvaluater:
         self.winning_board = np.zeros(shape=board_shape)
         self.agent_to_idx = {agent: i for i, agent in enumerate(config.agent["agent_type"])}
 
-    def evaluate_all(self):
+    def evaluate(self, n_episode=19, start=1, end=-1, n_version=5):
+        if end == -1:
+            end = self.n_weight
+        assert 1 <= start <= end <= self.n_weight
+
+        schedule = np.linspace(start - 1, end - 1, n_version, dtype=int)
+
         print("[Evaulating Start]")
         for i in range(config.agent["n_agent_type"]):
             for j in range(config.agent["n_agent_type"]):
-                self.evaluate_two_agents(i, j)
+                self.evaluate_two_agents(n_episode, i, j, schedule)
 
         print("[Saving Data]")
         final_dir = os.path.join(self.dir_name, f"{self.n_weight:03d}", "array")
@@ -48,16 +55,16 @@ class SharedEvaluater:
         np.save(os.path.join(final_dir, f"score_board.npy"), self.score_board)
         np.save(os.path.join(final_dir, f"winning_board.npy"), self.winning_board)
 
-    def evaluate_two_agents(self, agent_idx1, agent_idx2):
+    def evaluate_two_agents(self, n_episode, agent_idx1, agent_idx2, schedule: List[int]):
         agent_type1 = config.agent["agent_type"][agent_idx1]
         agent_type2 = config.agent["agent_type"][agent_idx2]
 
         print(f"  [Evaluate {agent_type1} VS {agent_type2}]")
 
-        for i in range(self.n_weight):
-            for j in range(self.n_weight):
+        for i in schedule:
+            for j in schedule:
                 print(f"    Fight {agent_type1}_{i} VS {agent_type2}_{j}")
-                self.fight(7, agent_type1, agent_type2, i, j, False)
+                self.fight(n_episode, agent_type1, agent_type2, i, j, False)
 
     def fight(
         self,
