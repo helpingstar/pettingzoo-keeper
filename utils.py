@@ -66,9 +66,7 @@ def delete_files_in_leaf_folders(start_path):
                 print(f"Deleted file: {item_path}")
 
 
-def get_all_agents_weights(
-    experiment_name: str, is_shared: bool, is_main: bool
-) -> Dict[str, List[str]]:
+def get_all_agents_weights(experiment_name: str, is_shared: bool, is_main: bool) -> Dict[str, List[str]]:
     """A function that classifies and returns weights for each agent type.
 
     Args:
@@ -130,6 +128,19 @@ def get_schedule(n_agent, n_weights, n_divison, get_all_weights=False):
         schedules.append(weight_nums)
 
     return schedules
+
+
+def get_schedule2(n_agent, n_weights):
+    n_weights *= n_agent
+    boundary = int(n_weights * 0.7)
+    result = []
+    for _ in range(n_agent):
+        coin = np.random.rand()
+        if coin < 0.7:
+            result.append(np.random.randint(boundary, n_weights))
+        else:
+            result.append(np.random.randint(0, boundary))
+    return result
 
 
 def get_run_name(div_idx, agent_opp, agent_opp_idx, schedule):
