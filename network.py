@@ -14,14 +14,14 @@ class PPOAgent(nn.Module):
     def __init__(self, name=""):
         super().__init__()
         self.critic = nn.Sequential(
-            layer_init(nn.Linear(36, 128)),
+            layer_init(nn.Linear(35, 128)),
             nn.ReLU(),
             layer_init(nn.Linear(128, 128)),
             nn.ReLU(),
             layer_init(nn.Linear(128, 1), std=1.0),
         )
         self.actor = nn.Sequential(
-            layer_init(nn.Linear(36, 128)),
+            layer_init(nn.Linear(35, 128)),
             nn.ReLU(),
             layer_init(nn.Linear(128, 128)),
             nn.ReLU(),
@@ -42,3 +42,9 @@ class PPOAgent(nn.Module):
         if action is None:
             action = probs.sample()
         return action, probs.log_prob(action), probs.entropy(), self.critic(x)
+
+    def forward(self, x):
+        logits = self.actor(x)
+        probs = Categorical(logits=logits)
+        action = probs.sample()
+        return action

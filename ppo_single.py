@@ -23,6 +23,7 @@ import supersuit as ss
 import wandb
 from tqdm import tqdm
 from gymnasium.experimental.wrappers import RecordVideoV0
+import utils
 
 
 @dataclass
@@ -41,7 +42,7 @@ class Args:
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
-    capture_video: bool = False
+    capture_video: bool = True
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
@@ -99,22 +100,27 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, env):
+    def __init__(self, name=""):
         super().__init__()
         self.critic = nn.Sequential(
-            layer_init(nn.Linear(36, 128)),
+            layer_init(nn.Linear(35, 128)),
             nn.ReLU(),
             layer_init(nn.Linear(128, 128)),
             nn.ReLU(),
             layer_init(nn.Linear(128, 1), std=1.0),
         )
         self.actor = nn.Sequential(
-            layer_init(nn.Linear(36, 128)),
+            layer_init(nn.Linear(35, 128)),
             nn.ReLU(),
             layer_init(nn.Linear(128, 128)),
             nn.ReLU(),
             layer_init(nn.Linear(128, 18), std=0.01),
         )
+
+        # name of network
+        self.name = name
+
+        print(f"Create PPOAgent {self.name}")
 
     def get_value(self, x):
         return self.critic(x)
@@ -154,8 +160,7 @@ if __name__ == "__main__":
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
-        "|param|value|\n|-|-|\n%s"
-        % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
     # TRY NOT TO MODIFY: seeding
@@ -166,10 +171,11 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
+    render_mode = "rgb_array" if args.capture_video else None
     # env setup
     env = pikazoo_v0.env(
         winning_score=args.winning_score,
-        render_mode="rgb_array",
+        render_mode=render_mode,
         is_player1_computer=args.is_right,
         is_player2_computer=args.is_left,
     )
@@ -179,22 +185,19 @@ if __name__ == "__main__":
     env = ss.dtype_v0(env, np.float32)
     env = ss.normalize_obs_v0(env)
     env = ConvertSingleAgent(env, args.agent)
-    env = RecordVideoV0(
-        env=env,
-        video_folder=f"videos/{run_name}",
-        episode_trigger=lambda x: x % args.record_interval == 0,
-    )
+    if args.capture_video:
+        env = RecordVideoV0(
+            env=env,
+            video_folder=f"videos/{run_name}",
+            episode_trigger=lambda x: x % args.record_interval == 0,
+        )
 
-    agent = Agent(env).to(device)
+    agent = Agent("single_agent").to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
-    obs = torch.zeros(
-        (args.num_steps, args.num_envs) + env.observation_space(args.agent).shape
-    ).to(device)
-    actions = torch.zeros(
-        (args.num_steps, args.num_envs) + env.action_space(args.agent).shape
-    ).to(device)
+    obs = torch.zeros((args.num_steps, args.num_envs) + env.observation_space(args.agent).shape).to(device)
+    actions = torch.zeros((args.num_steps, args.num_envs) + env.action_space(args.agent).shape).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -227,9 +230,7 @@ if __name__ == "__main__":
             logprobs[step] = logprob
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, terminations, truncations, infos = env.step(
-                action.cpu().numpy()
-            )
+            next_obs, reward, terminations, truncations, infos = env.step(action.cpu().numpy())
             # print(reward)
             if terminations or truncations:
                 writer.add_scalar(
@@ -237,12 +238,8 @@ if __name__ == "__main__":
                     infos["score"][args.agent_idx] - infos["score"][args.agent_o_idx],
                     global_step,
                 )
-                writer.add_scalar(
-                    "charts/cumulative_reward", infos["episode"]["r"], global_step
-                )
-                writer.add_scalar(
-                    "charts/episode_length", infos["episode"]["l"], global_step
-                )
+                writer.add_scalar("charts/cumulative_reward", infos["episode"]["r"], global_step)
+                writer.add_scalar("charts/episode_length", infos["episode"]["l"], global_step)
                 writer.add_scalar(
                     "charts/frame_per_round",
                     infos["episode"]["l"] // sum(infos["score"]),
@@ -252,9 +249,7 @@ if __name__ == "__main__":
 
             next_done = np.array(any([terminations, truncations]))
             rewards[step] = torch.tensor(reward).to(device).view(-1)
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(
-                next_done
-            ).to(device)
+            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -268,12 +263,8 @@ if __name__ == "__main__":
                 else:
                     nextnonterminal = 1.0 - dones[t + 1]
                     nextvalues = values[t + 1]
-                delta = (
-                    rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
-                )
-                advantages[t] = lastgaelam = (
-                    delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
-                )
+                delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
+                advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
             returns = advantages + values
 
         # flatten the batch
@@ -303,21 +294,15 @@ if __name__ == "__main__":
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio).mean()
                     approx_kl = ((ratio - 1) - logratio).mean()
-                    clipfracs += [
-                        ((ratio - 1.0).abs() > args.clip_coef).float().mean().item()
-                    ]
+                    clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean().item()]
 
                 mb_advantages = b_advantages[mb_inds]
                 if args.norm_adv:
-                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (
-                        mb_advantages.std() + 1e-8
-                    )
+                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
                 # Policy loss
                 pg_loss1 = -mb_advantages * ratio
-                pg_loss2 = -mb_advantages * torch.clamp(
-                    ratio, 1 - args.clip_coef, 1 + args.clip_coef
-                )
+                pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
                 pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
                 # Value loss
@@ -351,9 +336,7 @@ if __name__ == "__main__":
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
-        writer.add_scalar(
-            "charts/learning_rate", optimizer.param_groups[0]["lr"], global_step
-        )
+        writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
         writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
         writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
         writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
@@ -361,9 +344,7 @@ if __name__ == "__main__":
         writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        writer.add_scalar(
-            "charts/SPS", int(global_step / (time.time() - start_time)), global_step
-        )
-
+        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+    utils.save_weights(agent, os.path.join("data", "single_agent", f"{args.agent}_{run_name}.pth"))
     env.close()
     writer.close()
