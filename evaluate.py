@@ -9,6 +9,7 @@ import config
 import os
 from time import time
 from typing import List
+import onnxruntime
 
 
 class SharedEvaluater:
@@ -118,6 +119,91 @@ class SharedEvaluater:
         env.close()
 
 
+def evaluate_single_agent(n_episode: int, is_right: int, weight_path: str, render_mode):
+    assert render_mode in ["rgb_array", "human", None]
+    assert torch.cuda.is_available(), "CUDA IS NOT AVAILABLE"
+    device = "cuda:0"
+    agent = PPOAgent("evaluate_single_agent").to(device).eval()
+
+    assert not agent.training, "The network should be in eval mode."
+
+    utils.load_weights(agent, weight_path)
+
+    is_player1_computer = bool(is_right)
+    is_player2_computer = not bool(is_right)
+
+    if render_mode == "rgb_array":
+        env = pikazoo_v0.env(
+            render_mode="rgb_array", is_player1_computer=is_player1_computer, is_player2_computer=is_player2_computer
+        )
+        env = RecordVideoV0(env)
+    elif render_mode == "human":
+        env = pikazoo_v0.env(
+            render_mode="human", is_player1_computer=is_player1_computer, is_player2_computer=is_player2_computer
+        )
+    else:
+        env = pikazoo_v0.env(is_player1_computer=is_player1_computer, is_player2_computer=is_player2_computer)
+
+    env = ss.dtype_v0(env, np.float32)
+    env = ss.normalize_obs_v0(env)
+
+    player = env.possible_agents[is_right]
+    player_o = env.possible_agents[is_right ^ 1]
+
+    with torch.inference_mode():
+        for i in range(n_episode):
+            observations, infos = env.reset()
+            while env.agents:
+                # this is where you would insert your policy
+                actions = {
+                    player: agent(torch.tensor(observations[player]).to(device)),
+                    player_o: 0,
+                }
+                observations, rewards, terminations, truncations, infos = env.step(actions)
+    env.close()
+
+
+def evaluate_single_agent_onnx(n_episode: int, is_right: int, onnx_path: str, render_mode):
+    assert render_mode in ["rgb_array", "human", None]
+
+    ort_session = onnxruntime.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
+
+    is_player1_computer = bool(is_right)
+    is_player2_computer = not bool(is_right)
+
+    if render_mode == "rgb_array":
+        env = pikazoo_v0.env(
+            render_mode="rgb_array", is_player1_computer=is_player1_computer, is_player2_computer=is_player2_computer
+        )
+        env = RecordVideoV0(env)
+    elif render_mode == "human":
+        env = pikazoo_v0.env(
+            render_mode="human", is_player1_computer=is_player1_computer, is_player2_computer=is_player2_computer
+        )
+    else:
+        env = pikazoo_v0.env(is_player1_computer=is_player1_computer, is_player2_computer=is_player2_computer)
+
+    env = ss.dtype_v0(env, np.float32)
+    env = ss.normalize_obs_v0(env)
+
+    player = env.possible_agents[is_right]
+    player_o = env.possible_agents[is_right ^ 1]
+
+    for i in range(n_episode):
+        observations, infos = env.reset()
+        while env.agents:
+            # this is where you would insert your policy
+            ort_inputs = {ort_session.get_inputs()[0].name: observations[player]}
+            ort_outs = ort_session.run(None, ort_inputs)
+            actions = {
+                player: ort_outs[0],
+                player_o: 0,
+            }
+            observations, rewards, terminations, truncations, infos = env.step(actions)
+    env.close()
+
+
 if __name__ == "__main__":
-    evaluater = SharedEvaluater("ex1")
-    evaluater.evaluate_all()
+    # evaluater = SharedEvaluater("ex1")
+    # evaluater.evaluate(11, 1, -1, 6)
+    evaluate_single_agent_onnx(5, 0, "pika.onnx", "human")
