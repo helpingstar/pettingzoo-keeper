@@ -15,6 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 from pikazoo import pikazoo_v0
 from pikazoo.wrappers import RecordEpisodeStatistics, NormalizeObservation
 import supersuit as ss
+from tqdm import tqdm
 
 
 @dataclass
@@ -23,13 +24,13 @@ class Args:
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
-    torch_deterministic: bool = True
+    torch_deterministic: bool = False
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
     """if toggled, cuda will be enabled by default"""
-    track: bool = False
+    track: bool = True
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "cleanRL"
+    wandb_project_name: str = "pikazoo_symmetry"
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
@@ -37,13 +38,13 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = "CartPole-v1"
+    env_id: str = "pika-zoo"
     """the id of the environment"""
-    total_timesteps: int = 500000
+    total_timesteps: int = 600000000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 16
+    num_envs: int = 64
     """the number of parallel game environments"""
     num_steps: int = 128
     """the number of steps to run in each environment per policy rollout"""
@@ -80,8 +81,10 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
-    n_cpus: int = 8
+    n_cpus: int = 16
     """the number of cpus"""
+
+    load_weight: str = "runs/pika-zoo__ppo_vec_single__1__1710395397/cleanrl_ppo_vec_single_24400.pt"
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -134,7 +137,7 @@ if __name__ == "__main__":
             sync_tensorboard=True,
             config=vars(args),
             name=run_name,
-            monitor_gym=True,
+            # monitor_gym=True,
             save_code=True,
         )
     writer = SummaryWriter(f"runs/{run_name}")
@@ -152,7 +155,6 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    env = pikazoo_v0.env()
     env = pikazoo_v0.env(winning_score=15, render_mode=None)
     env = NormalizeObservation(env)
     env = RecordEpisodeStatistics(env)
@@ -162,6 +164,8 @@ if __name__ == "__main__":
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs).to(device)
+    if args.load_weight:
+        agent.load_state_dict(torch.load(args.load_weight))
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
@@ -179,7 +183,7 @@ if __name__ == "__main__":
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 
-    for iteration in range(1, args.num_iterations + 1):
+    for iteration in tqdm(range(1, args.num_iterations + 1)):
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
             frac = 1.0 - (iteration - 1.0) / args.num_iterations
@@ -206,9 +210,9 @@ if __name__ == "__main__":
 
             for i in range(0, args.num_envs, 2):
                 if "episode" in infos[i]:
-                    print(f"global_step={global_step}, episodic_return={infos[i]['episode']['r']}")
+                    # print(f"global_step={global_step}, episodic_return={infos[i]['episode']['r']}")
                     writer.add_scalar("charts/episodic_return", infos[i]["episode"]["r"], global_step)
-                    writer.add_scalar("charts/episodic_return", infos[i]["episode"]["l"], global_step)
+                    writer.add_scalar("charts/episodic_length", infos[i]["episode"]["l"], global_step)
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -303,8 +307,13 @@ if __name__ == "__main__":
         writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        print("SPS:", int(global_step / (time.time() - start_time)))
+        # print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+
+        if iteration % (args.num_iterations // 10) == 0:
+            model_path = f"runs/{run_name}/cleanrl_{args.exp_name}_{iteration}.pt"
+            torch.save(agent.state_dict(), model_path)
+            print(f"model saved to {model_path}")
 
     envs.close()
     writer.close()
