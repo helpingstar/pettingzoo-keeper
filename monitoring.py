@@ -9,39 +9,29 @@ import numpy as np
 import gymnasium as gym
 
 
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
-
-
 class Agent(nn.Module):
     def __init__(self):
         super().__init__()
         self.critic = nn.Sequential(
-            layer_init(nn.Linear(35, 128)),
+            nn.Linear(35, 128),
             nn.ReLU(),
-            layer_init(nn.Linear(128, 128)),
+            nn.Linear(128, 128),
             nn.ReLU(),
-            layer_init(nn.Linear(128, 1), std=1.0),
+            nn.Linear(128, 1),
         )
         self.actor = nn.Sequential(
-            layer_init(nn.Linear(35, 128)),
+            nn.Linear(35, 128),
             nn.ReLU(),
-            layer_init(nn.Linear(128, 128)),
+            nn.Linear(128, 128),
             nn.ReLU(),
-            layer_init(nn.Linear(128, 18), std=0.01),
+            nn.Linear(128, 18),
         )
 
-    def get_value(self, x):
-        return self.critic(x)
-
-    def get_action_and_value(self, x, action=None):
+    def get_action(self, x):
         logits = self.actor(x)
         probs = Categorical(logits=logits)
-        if action is None:
-            action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(x)
+        action = probs.sample()
+        return action
 
 
 def obs_to_torch(obs: Dict[str, np.ndarray], divide: bool):
@@ -62,7 +52,7 @@ def torch_to_action(arr):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"device: {device}")
 n_episode = 2
-weight_path = "runs/pika-zoo__ppo_vec_single__1__1710417091/cleanrl_ppo_vec_single_73240.pt"
+weight_path = "runs/pika-zoo__ppo_vec_single__1__1710496498/cleanrl_ppo_vec_single_152580.pt"
 is_player1_computer = False
 is_player2_computer = True
 winning_score = 15
@@ -86,7 +76,7 @@ with torch.inference_mode():
         observations, infos = env.reset()
         while env.agents:
             observations = obs_to_torch(observations, divide=False)
-            actions = agent.get_action_and_value(observations)[0]
+            actions = agent.get_action(observations)
             actions = torch_to_action(actions)
             observations, rewards, terminations, truncations, infos = env.step(actions)
 env.close()

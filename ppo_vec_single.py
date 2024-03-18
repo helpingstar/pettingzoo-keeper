@@ -40,13 +40,13 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "pika-zoo"
     """the id of the environment"""
-    total_timesteps: int = 600000000
+    total_timesteps: int = 10000000000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 64
+    num_envs: int = 128
     """the number of parallel game environments"""
-    num_steps: int = 128
+    num_steps: int = 512
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
@@ -81,10 +81,10 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
-    n_cpus: int = 16
+    n_cpus: int = 32
     """the number of cpus"""
 
-    load_weight: str = "runs/pika-zoo__ppo_vec_single__1__1710395397/cleanrl_ppo_vec_single_24400.pt"
+    load_weight: str = ""
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
