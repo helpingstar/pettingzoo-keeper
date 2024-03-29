@@ -1,11 +1,11 @@
 from pikazoo import pikazoo_v0
+from pikazoo.wrappers import NormalizeObservation
 import supersuit as ss
 import pettingzoo
 
 env = pikazoo_v0.env()
-env = ss.pettingzoo_env_to_vec_env_v1(env)
-envs = ss.concat_vec_envs_v1(env, 4 // 2, num_cpus=0, base_class="gymnasium")
+env = NormalizeObservation(env)
 
-obs, info = envs.reset()
+observations, infos = env.reset(seed=42)
 
-print(obs, info)
+print(observations["player_2"][0])

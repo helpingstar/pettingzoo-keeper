@@ -62,13 +62,13 @@ agent.load_state_dict(torch.load(weight_path))
 
 env = pikazoo_v0.env(
     winning_score=winning_score,
-    render_mode="rgb_array",
+    render_mode="human",
     is_player1_computer=is_player1_computer,
     is_player2_computer=is_player2_computer,
 )
 
 # env = RecordVideoV0(env, ".", step_trigger=lambda x: x % 10000 == 0, video_length=10000, fps=60)
-env = RecordVideoV0(env, ".", episode_trigger=lambda x: True, fps=60)
+# env = RecordVideoV0(env, ".", episode_trigger=lambda x: True, fps=60)
 env = NormalizeObservation(env)
 
 with torch.inference_mode():

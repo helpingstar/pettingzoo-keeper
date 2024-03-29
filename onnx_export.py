@@ -7,7 +7,7 @@ import numpy as np
 
 torch_model = PPOAgent("onnx")
 
-utils.load_weights(torch_model, "data/single_agent/player_1_5M.pth")
+utils.load_weights(torch_model, "data/weight/selfplay/v1/cleanrl_ppo_vec_single_152580.pt")
 batch_size = 1
 
 # set the model to inference mode
