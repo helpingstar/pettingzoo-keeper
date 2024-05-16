@@ -10,8 +10,8 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     return layer
 
 
-class PPOAgent(nn.Module):
-    def __init__(self, name=""):
+class Agent(nn.Module):
+    def __init__(self, envs):
         super().__init__()
         self.critic = nn.Sequential(
             layer_init(nn.Linear(35, 128)),
@@ -28,11 +28,6 @@ class PPOAgent(nn.Module):
             layer_init(nn.Linear(128, 18), std=0.01),
         )
 
-        # name of network
-        self.name = name
-
-        print(f"Create PPOAgent {self.name}")
-
     def get_value(self, x):
         return self.critic(x)
 
@@ -42,9 +37,3 @@ class PPOAgent(nn.Module):
         if action is None:
             action = probs.sample()
         return action, probs.log_prob(action), probs.entropy(), self.critic(x)
-
-    def forward(self, x):
-        logits = self.actor(x)
-        probs = Categorical(logits=logits)
-        action = probs.sample()
-        return action
