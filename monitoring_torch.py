@@ -54,7 +54,7 @@ print(f"device: {device}")
 n_episode = 2
 weight_path = "runs/pika-zoo__ppo_vec_single__1__1710496498/cleanrl_ppo_vec_single_152580.pt"
 is_player1_computer = False
-is_player2_computer = True
+is_player2_computer = False
 winning_score = 15
 
 agent = Agent().to(device)
@@ -62,12 +62,12 @@ agent.load_state_dict(torch.load(weight_path))
 
 env = pikazoo_v0.env(
     winning_score=winning_score,
-    render_mode="human",
+    render_mode="rgb_array",
     is_player1_computer=is_player1_computer,
     is_player2_computer=is_player2_computer,
 )
 
-# env = RecordVideoV0(env, ".", step_trigger=lambda x: x % 10000 == 0, video_length=10000, fps=60)
+env = RecordVideoV0(env, ".", step_trigger=lambda x: x % 2100 == 0, video_length=2100, fps=30)
 # env = RecordVideoV0(env, ".", episode_trigger=lambda x: True, fps=60)
 env = NormalizeObservation(env)
 

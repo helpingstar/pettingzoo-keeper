@@ -41,11 +41,11 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "pika-zoo"
     """the id of the environment"""
-    total_timesteps: int = 10000000000
+    total_timesteps: int = 10_000_000_000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 128
+    num_envs: int = 96
     """the number of parallel game environments"""
     num_steps: int = 512
     """the number of steps to run in each environment per policy rollout"""
@@ -82,8 +82,13 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
-    n_cpus: int = 32
+    n_cpus: int = 24
     """the number of cpus"""
+
+    log_charts_interval: int = 100
+    """Record interval for chart"""
+    log_losses_interval: int = 1
+    """Record interval for losses"""
 
     load_weight_train: str = ""
     load_weight_infer: str = ""
@@ -126,6 +131,8 @@ class Agent(nn.Module):
 
 
 if __name__ == "__main__":
+    charts_count = 0
+    losses_count = 0
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
@@ -165,12 +172,13 @@ if __name__ == "__main__":
     envs = ss.concat_vec_envs_v1(env, args.num_envs, num_cpus=args.n_cpus, base_class="gymnasium")
 
     train_id = "p1" if args.train_p1 else "p2"
-    handler = ElementHandler(envs.idx_starts[: args.num_envs], train_id)
+    idx_starts = np.arange(0, args.num_envs * 2, 2)
+    handler = ElementHandler(idx_starts, train_id)
 
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs).to(device)
-    agent_infer = Agent(envs).to(device)
+    agent_infer = Agent(envs).to(device).eval()
     if args.load_weight_train:
         agent.load_state_dict(torch.load(args.load_weight_train))
     if args.load_weight_infer:
@@ -219,13 +227,13 @@ if __name__ == "__main__":
             action = action.cpu().numpy()
             action_infer = action_infer.cpu().numpy()
             action = handler.combine(action, action_infer)
-            next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
+            next_obs, reward, terminations, truncations, infos = envs.step(action)
 
             next_obs, next_obs_infer = handler.split(next_obs)
             reward = handler.get_train(reward)
             terminations = handler.get_train(terminations)
             truncations = handler.get_train(truncations)
-            infos = handler.get_train(infos)
+            infos = handler.get_train(infos, id="info")
 
             next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
@@ -233,12 +241,13 @@ if __name__ == "__main__":
             next_obs_infer = torch.Tensor(next_obs_infer).to(device)
             next_done = torch.Tensor(next_done).to(device)
 
-            for i in range(0, args.num_envs):
+            for i in range(args.num_envs):
                 if "episode" in infos[i]:
-                    # print(f"global_step={global_step}, episodic_return={infos[i]['episode']['r']}")
-                    writer.add_scalar("charts/episodic_return", infos[i]["episode"]["r"], global_step)
-                    writer.add_scalar("charts/episodic_length", infos[i]["episode"]["l"], global_step)
-
+                    if charts_count % args.log_charts_interval == 0:
+                        # print(f"global_step={global_step}, episodic_return={infos[i]['episode']['r']}")
+                        writer.add_scalar("charts/episodic_return", infos[i]["episode"]["r"], global_step)
+                        writer.add_scalar("charts/episodic_length", infos[i]["episode"]["l"], global_step)
+                    charts_count += 1
         # bootstrap value if not done
         with torch.no_grad():
             next_value = agent.get_value(next_obs).reshape(1, -1)
@@ -323,17 +332,19 @@ if __name__ == "__main__":
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
-        # TRY NOT TO MODIFY: record rewards for plotting purposes
-        writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
-        writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-        writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-        writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-        writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
-        writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-        writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
-        writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        # print("SPS:", int(global_step / (time.time() - start_time)))
-        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+        if losses_count % args.log_losses_interval == 0:
+            # TRY NOT TO MODIFY: record rewards for plotting purposes
+            writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
+            writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
+            writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
+            writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
+            writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
+            writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
+            writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
+            writer.add_scalar("losses/explained_variance", explained_var, global_step)
+            # print("SPS:", int(global_step / (time.time() - start_time)))
+            writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+        losses_count += 1
 
         if iteration % (args.num_iterations // 10) == 0:
             model_path = f"runs/{run_name}/cleanrl_{args.exp_name}_{iteration}.pt"
