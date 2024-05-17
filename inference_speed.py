@@ -26,25 +26,27 @@ def speed_check(outer_iter, inner_iter, is_cuda=False):
     env = pikazoo_v0.env()
     high = env.observation_space().high
     low = env.observation_space().low
-    agent = Agent().to(device)
+    agent = Agent().to(device).eval()
 
     execution_time_table = np.zeros(shape=(outer_iter, inner_iter))
+    with torch.inference_mode():
+        for o in range(outer_iter):
+            for i in range(inner_iter):
+                start_time = time.perf_counter()
+                obs = env.observation_space().sample()
+                obs = (obs - low) / (high - low)
+                obs = torch.Tensor(obs).to(device)
+                action = agent.get_action(obs)
+                action = action.cpu().numpy()
+                execution_time = time.perf_counter() - start_time
+                execution_time_table[o][i] = execution_time
+    one_execution = execution_time_table.mean()
+    inner_execution = execution_time_table.sum(axis=1).mean()
 
-    for o in range(outer_iter):
-        for i in range(inner_iter):
-            start_time = time.perf_counter()
-            obs = env.observation_space().sample()
-            obs = (obs - low) / (high - low)
-            obs = torch.Tensor(obs).to(device)
-            action = agent.get_action(obs)
-            action = action.cpu().numpy()
-            execution_time = time.perf_counter() - start_time
-            execution_time_table[o][i] = execution_time
-    print(execution_time_table.mean())
-    print(execution_time_table.sum(axis=1).mean())
-    return
+    print(f"{one_execution=}")
+    print(f"{inner_execution=}")
 
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    speed_check(args.outer_iteration, args.inner_iteration, True)
+    speed_check(args.outer_iteration, args.inner_iteration, False)

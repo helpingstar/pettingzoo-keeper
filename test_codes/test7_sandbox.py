@@ -39,7 +39,7 @@ env = ss.pettingzoo_env_to_vec_env_v1(env)
 envs = ss.concat_vec_envs_v1(env, num_envs, num_cpus=6, base_class="gymnasium")
 
 print(envs.idx_starts)
-agent = Agent(envs)
+agent = Agent()
 
 p1_indices = np.array(envs.idx_starts[:-1])
 p2_indices = p1_indices + 1

@@ -11,22 +11,28 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, envs):
+    def __init__(self):
         super().__init__()
         self.critic = nn.Sequential(
-            layer_init(nn.Linear(35, 128)),
+            layer_init(nn.Linear(35, 256)),
             nn.ReLU(),
-            layer_init(nn.Linear(128, 128)),
+            layer_init(nn.Linear(256, 256)),
             nn.ReLU(),
-            layer_init(nn.Linear(128, 1), std=1.0),
+            layer_init(nn.Linear(256, 1), std=1.0),
         )
         self.actor = nn.Sequential(
-            layer_init(nn.Linear(35, 128)),
+            layer_init(nn.Linear(35, 256)),
             nn.ReLU(),
-            layer_init(nn.Linear(128, 128)),
+            layer_init(nn.Linear(256, 256)),
             nn.ReLU(),
-            layer_init(nn.Linear(128, 18), std=0.01),
+            layer_init(nn.Linear(256, 18), std=0.01),
         )
+
+    def get_action(self, x):
+        logits = self.actor(x)
+        probs = Categorical(logits=logits)
+        action = probs.sample()
+        return action
 
     def get_value(self, x):
         return self.critic(x)

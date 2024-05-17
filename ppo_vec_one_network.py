@@ -129,7 +129,7 @@ if __name__ == "__main__":
 
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    agent = Agent(envs).to(device)
+    agent = Agent().to(device)
     if args.load_weight:
         agent.load_state_dict(torch.load(args.load_weight))
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)

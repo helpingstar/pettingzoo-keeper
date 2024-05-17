@@ -42,7 +42,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "pika-zoo"
     """the id of the environment"""
-    total_timesteps: int = 10_000_000_000
+    total_timesteps: int = 300_000_000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -143,8 +143,8 @@ if __name__ == "__main__":
 
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    agent = Agent(envs).to(device)
-    agent_infer = Agent(envs).to(device).eval()
+    agent = Agent().to(device)
+    agent_infer = Agent().to(device).eval()
     if args.load_weight_train:
         agent.load_state_dict(torch.load(args.load_weight_train))
     if args.load_weight_infer:
