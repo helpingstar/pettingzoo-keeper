@@ -34,7 +34,7 @@ class ElementHandler:
 
 
 class WeightHandler:
-    def __init__(self, path_pool):
+    def __init__(self, path_pool="data/weight/pool"):
         self._dir = dict()
         self._players = ("p1", "p2")
         self._dir["pool"] = path_pool
@@ -49,34 +49,41 @@ class WeightHandler:
                 os.makedirs(directory)
                 print(f"Directory {directory} is created.")
 
-        self.n_weight_p1 = len(os.listdir(self._dir["p1"]))
-        self.n_weight_p2 = len(os.listdir(self._dir["p2"]))
+        self.n_weight = {p: len(os.listdir(self._dir[p])) for p in self._players}
 
-        if self.n_weight_p1 == 0 or self.n_weight_p2 == 0:
+        if self.n_weight["p1"] == 0 or self.n_weight["p2"] == 0:
             dummy_agent = Agent()
-            if self.n_weight_p1 == 0:
+            if self.n_weight["p1"] == 0:
                 torch.save(dummy_agent.state_dict(), self._weight["p1_main"])
                 torch.save(dummy_agent.state_dict(), self.get_weight_path("p1", 1))
                 print(f"Initial weight for p1 is created.")
-            if self.n_weight_p2 == 0:
+            if self.n_weight["p2"] == 0:
                 torch.save(dummy_agent.state_dict(), self._weight["p2_main"])
                 torch.save(dummy_agent.state_dict(), self.get_weight_path("p2", 1))
                 print(f"Initial weight for p2 is created.")
             del dummy_agent
 
-    def _update_n_weight(self):
-        self.n_weight_p1 = len(os.listdir(self._dir["p1"]))
-        self.n_weight_p2 = len(os.listdir(self._dir["p2"]))
+    @property
+    def path_pool(self):
+        return self._dir["pool"]
 
-    def _get_train_turn(self):
+    def _update_n_weight(self):
+        self.n_weight["p1"] = len(os.listdir(self._dir["p1"]))
+        self.n_weight["p2"] = len(os.listdir(self._dir["p2"]))
+
+    def get_train_turn(self):
         self._update_n_weight()
-        if self.n_weight_p1 > self.n_weight_p2:
+        if self.n_weight["p1"] > self.n_weight["p2"]:
             return "p2"
         else:
             return "p1"
 
     def get_weight_path(self, player, n):
         return os.path.join(self._dir[player], f"{player}_{n:04d}.pth")
+
+    def get_round(self):
+        player_turn = self.get_train_turn()
+        return self.n_weight[player_turn]
 
 
 if __name__ == "__main__":

@@ -32,7 +32,7 @@ class Args:
     """if toggled, cuda will be enabled by default"""
     track: bool = True
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "pikazoo_symmetry"
+    wandb_project_name: str = "pikazoo_pool"
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
@@ -93,7 +93,9 @@ class Args:
 
     load_weight_train: str = ""
     load_weight_infer: str = ""
-    train_p1: bool = True
+    train_player: str = "p1"
+    round: int = 0
+    path_pool: str = ""
 
 
 if __name__ == "__main__":
@@ -137,9 +139,8 @@ if __name__ == "__main__":
     env = ss.pettingzoo_env_to_vec_env_v1(env)
     envs = ss.concat_vec_envs_v1(env, args.num_envs, num_cpus=args.n_cpus, base_class="gymnasium")
 
-    train_id = "p1" if args.train_p1 else "p2"
     idx_starts = np.arange(0, args.num_envs * 2, 2)
-    handler = ElementHandler(idx_starts, train_id)
+    handler = ElementHandler(idx_starts, args.train_player)
 
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
@@ -312,10 +313,9 @@ if __name__ == "__main__":
             writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
         losses_count += 1
 
-        if iteration % (args.num_iterations // 10) == 0:
-            model_path = f"runs/{run_name}/cleanrl_{args.exp_name}_{iteration}.pt"
-            torch.save(agent.state_dict(), model_path)
-            print(f"model saved to {model_path}")
-
+        new_model_path = os.path.join(args.path_pool, args.train_player, f"{args.train_player}_{args.round:04d}.pth")
+        main_model_path = os.path.join(args.path_pool, args.train_player, f"{args.train_player}_main.pth")
+        torch.save(agent.state_dict(), new_model_path)
+        torch.save(agent.state_dict(), main_model_path)
     envs.close()
     writer.close()
