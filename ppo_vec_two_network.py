@@ -42,7 +42,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "pika-zoo"
     """the id of the environment"""
-    total_timesteps: int = 300_000_000
+    total_timesteps: int = 30_000_000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -315,9 +315,9 @@ if __name__ == "__main__":
             writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
         losses_count += 1
 
-        new_model_path = os.path.join(args.path_pool, args.player_train, f"{args.player_train}_{args.round:04d}.pth")
-        main_model_path = os.path.join(args.path_pool, args.player_train, f"{args.player_train}_main.pth")
-        torch.save(agent.state_dict(), new_model_path)
-        torch.save(agent.state_dict(), main_model_path)
+    new_model_path = os.path.join(args.path_pool, args.player_train, f"{args.player_train}_{args.round:04d}.pth")
+    main_model_path = os.path.join(args.path_pool, args.player_train, f"{args.player_train}_main.pth")
+    torch.save(agent.state_dict(), new_model_path)
+    torch.save(agent.state_dict(), main_model_path)
     envs.close()
     writer.close()
