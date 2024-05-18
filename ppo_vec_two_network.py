@@ -50,7 +50,7 @@ class Args:
     """the number of parallel game environments"""
     num_steps: int = 512
     """the number of steps to run in each environment per policy rollout"""
-    anneal_lr: bool = True
+    anneal_lr: bool = False
     """Toggle learning rate annealing for policy and value networks"""
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -93,9 +93,10 @@ class Args:
 
     load_weight_train: str = ""
     load_weight_infer: str = ""
-    train_player: str = "p1"
+    player_train: str = "p1"
     round: int = 0
     path_pool: str = ""
+    index_infer: int = 0
 
 
 if __name__ == "__main__":
@@ -105,7 +106,8 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    player_infer = "p2" if args.player_train == "p1" else "p1"
+    run_name = f"{args.player_train}_{args.round}_vs_{player_infer}_{args.index_infer}"
     if args.track:
         import wandb
 
@@ -140,7 +142,7 @@ if __name__ == "__main__":
     envs = ss.concat_vec_envs_v1(env, args.num_envs, num_cpus=args.n_cpus, base_class="gymnasium")
 
     idx_starts = np.arange(0, args.num_envs * 2, 2)
-    handler = ElementHandler(idx_starts, args.train_player)
+    handler = ElementHandler(idx_starts, args.player_train)
 
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
@@ -313,8 +315,8 @@ if __name__ == "__main__":
             writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
         losses_count += 1
 
-        new_model_path = os.path.join(args.path_pool, args.train_player, f"{args.train_player}_{args.round:04d}.pth")
-        main_model_path = os.path.join(args.path_pool, args.train_player, f"{args.train_player}_main.pth")
+        new_model_path = os.path.join(args.path_pool, args.player_train, f"{args.player_train}_{args.round:04d}.pth")
+        main_model_path = os.path.join(args.path_pool, args.player_train, f"{args.player_train}_main.pth")
         torch.save(agent.state_dict(), new_model_path)
         torch.save(agent.state_dict(), main_model_path)
     envs.close()

@@ -55,11 +55,11 @@ class WeightHandler:
             dummy_agent = Agent()
             if self.n_weight["p1"] == 0:
                 torch.save(dummy_agent.state_dict(), self._weight["p1_main"])
-                torch.save(dummy_agent.state_dict(), self.get_weight_path("p1", 1))
+                torch.save(dummy_agent.state_dict(), self._get_weight_path("p1", 1))
                 print(f"Initial weight for p1 is created.")
             if self.n_weight["p2"] == 0:
                 torch.save(dummy_agent.state_dict(), self._weight["p2_main"])
-                torch.save(dummy_agent.state_dict(), self.get_weight_path("p2", 1))
+                torch.save(dummy_agent.state_dict(), self._get_weight_path("p2", 1))
                 print(f"Initial weight for p2 is created.")
             del dummy_agent
 
@@ -78,12 +78,32 @@ class WeightHandler:
         else:
             return "p1"
 
-    def get_weight_path(self, player, n):
+    def _get_weight_path(self, player, n):
         return os.path.join(self._dir[player], f"{player}_{n:04d}.pth")
+
+    def _get_weight_main_path(self, player):
+        return os.path.join(self._dir[player], f"{player}_main.pth")
+
+    def _other_player(self, player):
+        if player == "p1":
+            return "p2"
+        else:
+            return "p1"
 
     def get_round(self):
         player_turn = self.get_train_turn()
         return self.n_weight[player_turn]
+
+    def get_weight_paths_and_idx(self, way_of_select="uniform"):
+        player_train = self.get_train_turn()
+        player_infer = self._other_player(player_train)
+
+        weight_train = self._get_weight_main_path(player_train)
+        if way_of_select == "uniform":
+            idx_infer = np.random.randint(1, self.n_weight[player_infer])
+        weight_infer = self._get_weight_path(player_infer, idx_infer)
+
+        return weight_train, weight_infer, idx_infer
 
 
 if __name__ == "__main__":
