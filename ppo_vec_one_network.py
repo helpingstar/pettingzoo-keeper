@@ -13,10 +13,10 @@ import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 from pikazoo import pikazoo_v0
-from pikazoo.wrappers import RecordEpisodeStatistics, NormalizeObservation
+from pikazoo.wrappers import RecordEpisodeStatistics, NormalizeObservation, SimplifyAction
 import supersuit as ss
 from tqdm import tqdm
-from network import Agent
+from network import Agent, SimplifiedAgent
 
 
 @dataclass
@@ -45,7 +45,7 @@ class Args:
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 128
+    num_envs: int = 120
     """the number of parallel game environments"""
     num_steps: int = 512
     """the number of steps to run in each environment per policy rollout"""
@@ -82,13 +82,21 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
-    n_cpus: int = 32
+    n_cpus: int = 24
     """the number of cpus"""
+    simplify: bool = True
+
+    log_charts_interval: int = 100
+    """Record interval for chart"""
+    log_losses_interval: int = 10
+    """Record interval for losses"""
 
     load_weight: str = ""
 
 
 if __name__ == "__main__":
+    charts_count = 0
+    losses_count = 0
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
@@ -123,13 +131,19 @@ if __name__ == "__main__":
     # env setup
     env = pikazoo_v0.env(winning_score=15, render_mode=None)
     env = NormalizeObservation(env)
+    if args.simplify:
+        env = SimplifyAction(env)
     env = RecordEpisodeStatistics(env)
     env = ss.pettingzoo_env_to_vec_env_v1(env)
     envs = ss.concat_vec_envs_v1(env, args.num_envs // 2, num_cpus=args.n_cpus, base_class="gymnasium")
 
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    agent = Agent().to(device)
+    if args.simplify:
+        agent = SimplifiedAgent().to(device)
+    else:
+        agent = Agent().to(device)
+
     if args.load_weight:
         agent.load_state_dict(torch.load(args.load_weight))
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
@@ -176,10 +190,11 @@ if __name__ == "__main__":
 
             for i in range(0, args.num_envs, 2):
                 if "episode" in infos[i]:
-                    # print(f"global_step={global_step}, episodic_return={infos[i]['episode']['r']}")
-                    writer.add_scalar("charts/episodic_return", infos[i]["episode"]["r"], global_step)
-                    writer.add_scalar("charts/episodic_length", infos[i]["episode"]["l"], global_step)
-
+                    if charts_count % args.log_charts_interval == 0:
+                        # print(f"global_step={global_step}, episodic_return={infos[i]['episode']['r']}")
+                        writer.add_scalar("charts/episodic_return", infos[i]["episode"]["r"], global_step)
+                        writer.add_scalar("charts/episodic_length", infos[i]["episode"]["l"], global_step)
+                    charts_count += 1
         # bootstrap value if not done
         with torch.no_grad():
             next_value = agent.get_value(next_obs).reshape(1, -1)
@@ -265,18 +280,20 @@ if __name__ == "__main__":
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
-        writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
-        writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-        writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-        writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-        writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
-        writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-        writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
-        writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        # print("SPS:", int(global_step / (time.time() - start_time)))
-        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+        if losses_count % args.log_losses_interval == 0:
+            writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
+            writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
+            writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
+            writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
+            writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
+            writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
+            writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
+            writer.add_scalar("losses/explained_variance", explained_var, global_step)
+            # print("SPS:", int(global_step / (time.time() - start_time)))
+            writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+        losses_count += 1
 
-        if iteration % (args.num_iterations // 10) == 0:
+        if iteration % (args.num_iterations // 100) == 0:
             model_path = f"runs/{run_name}/cleanrl_{args.exp_name}_{iteration}.pt"
             torch.save(agent.state_dict(), model_path)
             print(f"model saved to {model_path}")
