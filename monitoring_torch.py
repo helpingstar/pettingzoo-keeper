@@ -1,5 +1,5 @@
 from pikazoo import pikazoo_v0
-from pikazoo.wrappers import NormalizeObservation, RecordEpisodeStatistics
+from pikazoo.wrappers import NormalizeObservation, RecordEpisodeStatistics, SimplifyAction
 from gymnasium.experimental.wrappers import RecordVideoV0
 import torch.nn as nn
 import torch
@@ -7,7 +7,9 @@ from torch.distributions.categorical import Categorical
 from typing import Dict
 import numpy as np
 import gymnasium as gym
-from network import Agent
+from network import Agent, SimplifiedAgent
+
+simplify = True
 
 
 def obs_to_torch(obs: Dict[str, np.ndarray], divide: bool):
@@ -28,12 +30,16 @@ def torch_to_action(arr):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"device: {device}")
 n_episode = 2
-weight_path = "runs/pika-zoo__ppo_vec_single__1__1710496498/cleanrl_ppo_vec_single_152580.pt"
+weight_path = "runs/pika-zoo__ppo_vec_one_network__1__1716265987/cleanrl_ppo_vec_one_network_8135.pt"
 is_player1_computer = False
 is_player2_computer = False
 winning_score = 15
 
-agent = Agent().to(device)
+if simplify:
+    agent = SimplifiedAgent().to(device)
+else:
+    agent = Agent().to(device)
+
 agent.load_state_dict(torch.load(weight_path))
 
 env = pikazoo_v0.env(
@@ -43,7 +49,11 @@ env = pikazoo_v0.env(
     is_player2_computer=is_player2_computer,
 )
 
-env = RecordVideoV0(env, ".", step_trigger=lambda x: x % 2100 == 0, video_length=2100, fps=30)
+if simplify:
+    env = SimplifyAction(env)
+
+
+env = RecordVideoV0(env, ".", step_trigger=lambda x: x % 10000 == 0, video_length=10000, fps=60)
 # env = RecordVideoV0(env, ".", episode_trigger=lambda x: True, fps=60)
 env = NormalizeObservation(env)
 
