@@ -7,7 +7,7 @@ from torch.distributions.categorical import Categorical
 from typing import Dict
 import numpy as np
 import gymnasium as gym
-from network import Agent, SimplifiedAgent
+from network import Agent
 
 
 def obs_to_torch(obs: Dict[str, np.ndarray], divide: bool):
@@ -32,50 +32,48 @@ n_episode = 2
 p1_map = (0, 1, 2, 3, 4, 6, 7, 10, 11, 12, 13, 14, 16)
 p2_map = (0, 1, 2, 4, 3, 7, 6, 10, 12, 11, 13, 15, 17)
 
-simplify_weight = "runs/pika-zoo__ppo_vec_one_network__1__1716278493/cleanrl_ppo_vec_one_network_49800.pt"
-weight_128 = "data/weight/selfplay/v1/cleanrl_ppo_vec_single_152580.pt"
+normal_13_256 = "data/weight/selfplay/v2/normal_13_256.pt"
+normal_18_128 = "data/weight/selfplay/v1/normal_18_128.pt"
+rv_13_256 = "data/weight/selfplay/v2/rv1_13_256.pt"
 
-weight_path_p1 = weight_128
-weight_path_p2 = simplify_weight
+weight_path_p1 = rv_13_256
+weight_path_p2 = rv_13_256
 
-simplify_p1 = False
-simplify_p2 = True
+n_action_p1 = 13
+n_action_p2 = 13
+
+linear_size_p1 = 256
+linear_size_p2 = 256
 
 is_player1_computer = False
 is_player2_computer = False
 
-linear_size_p1 = 128
-linear_size_p2 = 256
-
 winning_score = 15
 
-if simplify_p1:
-    agent_p1 = SimplifiedAgent(linear_size_p1)
-else:
-    agent_p1 = Agent(linear_size_p1)
-
-if simplify_p2:
-    agent_p2 = SimplifiedAgent(linear_size_p2)
-else:
-    agent_p2 = Agent(linear_size_p2)
+agent_p1 = Agent(linear_size_p1, n_action_p1)
+agent_p2 = Agent(linear_size_p2, n_action_p2)
 
 agent_p1 = agent_p1.eval().to(device)
 agent_p2 = agent_p2.eval().to(device)
 
-
 agent_p1.load_state_dict(torch.load(weight_path_p1))
 agent_p2.load_state_dict(torch.load(weight_path_p2))
 
+rendering = None
+recording = "step"
+
 env = pikazoo_v0.env(
     winning_score=winning_score,
-    render_mode="rgb_array",
+    render_mode=rendering,
     is_player1_computer=is_player1_computer,
     is_player2_computer=is_player2_computer,
 )
 
-
-env = RecordVideoV0(env, ".", step_trigger=lambda x: x % 10000 == 0, video_length=10000, fps=60)
-# env = RecordVideoV0(env, ".", episode_trigger=lambda x: True, fps=60)
+if rendering == "rgb_array":
+    if recording == "step":
+        env = RecordVideoV0(env, ".", step_trigger=lambda x: x % 10000 == 0, video_length=10000, fps=60)
+    elif recording == "episode":
+        env = RecordVideoV0(env, ".", episode_trigger=lambda x: True, fps=60)
 env = NormalizeObservation(env)
 
 with torch.inference_mode():
@@ -87,9 +85,10 @@ with torch.inference_mode():
                 "player_1": agent_p1.get_action(obs_p1).cpu().item(),
                 "player_2": agent_p2.get_action(obs_p2).cpu().item(),
             }
-            if simplify_p1:
+            if n_action_p1 == 13:
                 actions["player_1"] = p1_map[actions["player_1"]]
-            if simplify_p2:
+            if n_action_p2 == 13:
                 actions["player_2"] = p2_map[actions["player_2"]]
             observations, rewards, terminations, truncations, infos = env.step(actions)
+        print(infos)
 env.close()

@@ -13,7 +13,7 @@ import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 from pikazoo import pikazoo_v0
-from pikazoo.wrappers import RecordEpisodeStatistics, NormalizeObservation, SimplifyAction
+from pikazoo.wrappers import RecordEpisodeStatistics, NormalizeObservation, SimplifyAction, RewardByBallPosition
 import supersuit as ss
 from tqdm import tqdm
 from network import Agent, SimplifiedAgent
@@ -85,6 +85,7 @@ class Args:
     n_cpus: int = 24
     """the number of cpus"""
     simplify: bool = True
+    additional_reward: bool = True
 
     log_charts_interval: int = 100
     """Record interval for chart"""
@@ -131,6 +132,8 @@ if __name__ == "__main__":
     # env setup
     env = pikazoo_v0.env(winning_score=15, render_mode=None)
     env = NormalizeObservation(env)
+    if args.additional_reward:
+        env = RewardByBallPosition(env, (-0.002, -0.002, 0.002, 0.002, 0.002, 0.002, -0.002, -0.002))
     if args.simplify:
         env = SimplifyAction(env)
     env = RecordEpisodeStatistics(env)
