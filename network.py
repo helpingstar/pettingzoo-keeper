@@ -11,21 +11,21 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self):
+    def __init__(self, linear_size=256):
         super().__init__()
         self.critic = nn.Sequential(
-            layer_init(nn.Linear(35, 256)),
+            layer_init(nn.Linear(35, linear_size)),
             nn.ReLU(),
-            layer_init(nn.Linear(256, 256)),
+            layer_init(nn.Linear(linear_size, linear_size)),
             nn.ReLU(),
-            layer_init(nn.Linear(256, 1), std=1.0),
+            layer_init(nn.Linear(linear_size, 1), std=1.0),
         )
         self.actor = nn.Sequential(
-            layer_init(nn.Linear(35, 256)),
+            layer_init(nn.Linear(35, linear_size)),
             nn.ReLU(),
-            layer_init(nn.Linear(256, 256)),
+            layer_init(nn.Linear(linear_size, linear_size)),
             nn.ReLU(),
-            layer_init(nn.Linear(256, 18), std=0.01),
+            layer_init(nn.Linear(linear_size, 18), std=0.01),
         )
 
     def get_action(self, x):
@@ -46,21 +46,21 @@ class Agent(nn.Module):
 
 
 class SimplifiedAgent(nn.Module):
-    def __init__(self):
+    def __init__(self, linear_size=256):
         super().__init__()
         self.critic = nn.Sequential(
-            layer_init(nn.Linear(35, 256)),
+            layer_init(nn.Linear(35, linear_size)),
             nn.ReLU(),
-            layer_init(nn.Linear(256, 256)),
+            layer_init(nn.Linear(linear_size, linear_size)),
             nn.ReLU(),
-            layer_init(nn.Linear(256, 1), std=1.0),
+            layer_init(nn.Linear(linear_size, 1), std=1.0),
         )
         self.actor = nn.Sequential(
-            layer_init(nn.Linear(35, 256)),
+            layer_init(nn.Linear(35, linear_size)),
             nn.ReLU(),
-            layer_init(nn.Linear(256, 256)),
+            layer_init(nn.Linear(linear_size, linear_size)),
             nn.ReLU(),
-            layer_init(nn.Linear(256, 13), std=0.01),
+            layer_init(nn.Linear(linear_size, 13), std=0.01),
         )
 
     def get_action(self, x):

@@ -9,8 +9,6 @@ import numpy as np
 import gymnasium as gym
 from network import Agent, SimplifiedAgent
 
-simplify = True
-
 
 def obs_to_torch(obs: Dict[str, np.ndarray], divide: bool):
     p1_obs = torch.Tensor(obs["player_1"]).to(device)
@@ -30,17 +28,43 @@ def torch_to_action(arr):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"device: {device}")
 n_episode = 2
-weight_path = "runs/pika-zoo__ppo_vec_one_network__1__1716265987/cleanrl_ppo_vec_one_network_8135.pt"
+
+p1_map = (0, 1, 2, 3, 4, 6, 7, 10, 11, 12, 13, 14, 16)
+p2_map = (0, 1, 2, 4, 3, 7, 6, 10, 12, 11, 13, 15, 17)
+
+simplify_weight = "runs/pika-zoo__ppo_vec_one_network__1__1716278493/cleanrl_ppo_vec_one_network_49800.pt"
+weight_128 = "data/weight/selfplay/v1/cleanrl_ppo_vec_single_152580.pt"
+
+weight_path_p1 = weight_128
+weight_path_p2 = simplify_weight
+
+simplify_p1 = False
+simplify_p2 = True
+
 is_player1_computer = False
 is_player2_computer = False
+
+linear_size_p1 = 128
+linear_size_p2 = 256
+
 winning_score = 15
 
-if simplify:
-    agent = SimplifiedAgent().to(device)
+if simplify_p1:
+    agent_p1 = SimplifiedAgent(linear_size_p1)
 else:
-    agent = Agent().to(device)
+    agent_p1 = Agent(linear_size_p1)
 
-agent.load_state_dict(torch.load(weight_path))
+if simplify_p2:
+    agent_p2 = SimplifiedAgent(linear_size_p2)
+else:
+    agent_p2 = Agent(linear_size_p2)
+
+agent_p1 = agent_p1.eval().to(device)
+agent_p2 = agent_p2.eval().to(device)
+
+
+agent_p1.load_state_dict(torch.load(weight_path_p1))
+agent_p2.load_state_dict(torch.load(weight_path_p2))
 
 env = pikazoo_v0.env(
     winning_score=winning_score,
@@ -48,9 +72,6 @@ env = pikazoo_v0.env(
     is_player1_computer=is_player1_computer,
     is_player2_computer=is_player2_computer,
 )
-
-if simplify:
-    env = SimplifyAction(env)
 
 
 env = RecordVideoV0(env, ".", step_trigger=lambda x: x % 10000 == 0, video_length=10000, fps=60)
@@ -61,8 +82,14 @@ with torch.inference_mode():
     for i in range(n_episode):
         observations, infos = env.reset()
         while env.agents:
-            observations = obs_to_torch(observations, divide=False)
-            actions = agent.get_action(observations)
-            actions = torch_to_action(actions)
+            obs_p1, obs_p2 = obs_to_torch(observations, divide=True)
+            actions = {
+                "player_1": agent_p1.get_action(obs_p1).cpu().item(),
+                "player_2": agent_p2.get_action(obs_p2).cpu().item(),
+            }
+            if simplify_p1:
+                actions["player_1"] = p1_map[actions["player_1"]]
+            if simplify_p2:
+                actions["player_2"] = p2_map[actions["player_2"]]
             observations, rewards, terminations, truncations, infos = env.step(actions)
 env.close()
