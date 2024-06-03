@@ -36,22 +36,26 @@ normal_13_256 = "data/weight/selfplay/v2/normal_13_256.pt"
 normal_18_128 = "data/weight/selfplay/v1/normal_18_128.pt"
 rv_13_256 = "data/weight/selfplay/v2/rv1_13_256.pt"
 
-weight_path_p1 = rv_13_256
-weight_path_p2 = rv_13_256
+weight_path_p1 = normal_18_128
+weight_path_p2 = normal_13_256
 
-n_action_p1 = 13
-n_action_p2 = 13
+p1_n_action = 18
+p2_n_action = 13
 
-linear_size_p1 = 256
-linear_size_p2 = 256
+p1_n_linear = 128
+p2_n_linear = 256
+
+p1_n_layer = 1
+p2_n_layer = 1
+
 
 is_player1_computer = False
 is_player2_computer = False
 
 winning_score = 15
 
-agent_p1 = Agent(linear_size_p1, n_action_p1)
-agent_p2 = Agent(linear_size_p2, n_action_p2)
+agent_p1 = Agent(p1_n_linear, p1_n_action, p1_n_layer)
+agent_p2 = Agent(p2_n_linear, p2_n_action, p2_n_layer)
 
 agent_p1 = agent_p1.eval().to(device)
 agent_p2 = agent_p2.eval().to(device)
@@ -60,7 +64,7 @@ agent_p1.load_state_dict(torch.load(weight_path_p1))
 agent_p2.load_state_dict(torch.load(weight_path_p2))
 
 rendering = None
-recording = "step"
+recording = None
 
 env = pikazoo_v0.env(
     winning_score=winning_score,
@@ -85,9 +89,9 @@ with torch.inference_mode():
                 "player_1": agent_p1.get_action(obs_p1).cpu().item(),
                 "player_2": agent_p2.get_action(obs_p2).cpu().item(),
             }
-            if n_action_p1 == 13:
+            if p1_n_action == 13:
                 actions["player_1"] = p1_map[actions["player_1"]]
-            if n_action_p2 == 13:
+            if p2_n_action == 13:
                 actions["player_2"] = p2_map[actions["player_2"]]
             observations, rewards, terminations, truncations, infos = env.step(actions)
         print(infos)

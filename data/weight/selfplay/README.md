@@ -1,14 +1,14 @@
 ## v1
 
 * n_action=18
-* linear_size=128
-
+* n_linear=128
+* n_layer=1
 
 ## v2
 
 * n_action=13
-* linear_size=256
-
+* n_lianer=256
+* n_layer=1
 ### rv1
 ```python
 RewardByBallPosition(env, (-0.002, -0.002, 0.002, 0.002, 0.002, 0.002, -0.002, -0.002))

@@ -16,7 +16,7 @@ from pikazoo import pikazoo_v0
 from pikazoo.wrappers import RecordEpisodeStatistics, NormalizeObservation, SimplifyAction, RewardByBallPosition
 import supersuit as ss
 from tqdm import tqdm
-from network import Agent, SimplifiedAgent
+from network import Agent
 
 
 @dataclass
@@ -41,7 +41,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "pika-zoo"
     """the id of the environment"""
-    total_timesteps: int = 10000000000
+    total_timesteps: int = 50000000000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -84,15 +84,17 @@ class Args:
 
     n_cpus: int = 24
     """the number of cpus"""
-    simplify: bool = True
-    additional_reward: bool = True
+    additional_reward: bool = False
 
-    log_charts_interval: int = 100
+    log_charts_interval: int = 200
     """Record interval for chart"""
-    log_losses_interval: int = 40
+    log_losses_interval: int = 100
     """Record interval for losses"""
 
     load_weight: str = ""
+    n_linear: int = 256
+    n_layer: int = 2
+    n_action: int = 18
 
 
 if __name__ == "__main__":
@@ -134,18 +136,13 @@ if __name__ == "__main__":
     env = NormalizeObservation(env)
     if args.additional_reward:
         env = RewardByBallPosition(env, (-0.002, -0.002, 0.002, 0.002, 0.002, 0.002, -0.002, -0.002))
-    if args.simplify:
-        env = SimplifyAction(env)
     env = RecordEpisodeStatistics(env)
     env = ss.pettingzoo_env_to_vec_env_v1(env)
     envs = ss.concat_vec_envs_v1(env, args.num_envs // 2, num_cpus=args.n_cpus, base_class="gymnasium")
 
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    if args.simplify:
-        agent = SimplifiedAgent().to(device)
-    else:
-        agent = Agent().to(device)
+    agent = Agent(n_linear=args.n_linear, n_action=args.n_action, n_layer=args.n_layer).to(device)
 
     if args.load_weight:
         agent.load_state_dict(torch.load(args.load_weight))

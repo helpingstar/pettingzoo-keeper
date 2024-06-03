@@ -17,21 +17,25 @@ import time
 class Args:
     outer_iteration: int = 10
     inner_iteration: int = 60
+    is_cuda: bool = False
+    n_linear: int = 256
+    n_layer: int = 2
+    n_action: int = 18
 
 
-def speed_check(outer_iter, inner_iter, is_cuda=False):
-    device = torch.device("cuda" if torch.cuda.is_available() and is_cuda else "cpu")
-    assert (is_cuda and device.type == "cuda") or (not is_cuda and device.type == "cpu")
+def speed_check(args: Args):
+    device = torch.device("cuda" if torch.cuda.is_available() and args.is_cuda else "cpu")
+    assert (args.is_cuda and device.type == "cuda") or (not args.is_cuda and device.type == "cpu")
 
     env = pikazoo_v0.env()
     high = env.observation_space().high
     low = env.observation_space().low
-    agent = Agent().to(device).eval()
+    agent = Agent(n_linear=args.n_linear, n_action=args.n_action, n_layer=args.n_layer).to(device).eval()
 
-    execution_time_table = np.zeros(shape=(outer_iter, inner_iter))
+    execution_time_table = np.zeros(shape=(args.outer_iteration, args.inner_iteration))
     with torch.inference_mode():
-        for o in range(outer_iter):
-            for i in range(inner_iter):
+        for o in range(args.outer_iteration):
+            for i in range(args.inner_iteration):
                 start_time = time.perf_counter()
                 obs = env.observation_space().sample()
                 obs = (obs - low) / (high - low)
@@ -49,4 +53,4 @@ def speed_check(outer_iter, inner_iter, is_cuda=False):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    speed_check(args.outer_iteration, args.inner_iteration, False)
+    speed_check(args)

@@ -11,22 +11,23 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, linear_size=256, n_action=13):
+    def __init__(self, n_linear, n_action, n_layer):
         super().__init__()
-        self.critic = nn.Sequential(
-            layer_init(nn.Linear(35, linear_size)),
-            nn.ReLU(),
-            layer_init(nn.Linear(linear_size, linear_size)),
-            nn.ReLU(),
-            layer_init(nn.Linear(linear_size, 1), std=1.0),
-        )
-        self.actor = nn.Sequential(
-            layer_init(nn.Linear(35, linear_size)),
-            nn.ReLU(),
-            layer_init(nn.Linear(linear_size, linear_size)),
-            nn.ReLU(),
-            layer_init(nn.Linear(linear_size, n_action), std=0.01),
-        )
+        # Critic Network
+        critic_layers = [nn.Linear(35, n_linear), nn.ReLU()]
+        for _ in range(n_layer):
+            critic_layers.append(nn.Linear(n_linear, n_linear))
+            critic_layers.append(nn.ReLU())
+        critic_layers.append(nn.Linear(n_linear, 1))
+        self.critic = nn.Sequential(*critic_layers)
+
+        # Actor Network
+        actor_layers = [nn.Linear(35, n_linear), nn.ReLU()]
+        for _ in range(n_layer):
+            actor_layers.append(nn.Linear(n_linear, n_linear))
+            actor_layers.append(nn.ReLU())
+        actor_layers.append(nn.Linear(n_linear, n_action))
+        self.actor = nn.Sequential(*actor_layers)
 
     def get_action(self, x):
         logits = self.actor(x)
