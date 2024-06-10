@@ -41,15 +41,15 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "pika-zoo"
     """the id of the environment"""
-    total_timesteps: int = 50000000000
+    total_timesteps: int = 20_000_000_000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 196
+    num_envs: int = 240
     """the number of parallel game environments"""
-    num_steps: int = 1024
+    num_steps: int = 512
     """the number of steps to run in each environment per policy rollout"""
-    anneal_lr: bool = False
+    anneal_lr: bool = True
     """Toggle learning rate annealing for policy and value networks"""
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -86,13 +86,13 @@ class Args:
     """the number of cpus"""
     additional_reward: bool = False
 
-    log_charts_interval: int = 200
+    log_charts_interval: int = 100
     """Record interval for chart"""
-    log_losses_interval: int = 100
+    log_losses_interval: int = 50
     """Record interval for losses"""
 
     load_weight: str = ""
-    n_linear: int = 256
+    n_linear: int = 128
     n_layer: int = 2
     n_action: int = 18
 
